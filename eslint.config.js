@@ -56,6 +56,15 @@ export default defineConfig(
   js.configs.recommended,
   tseslint.configs.recommended,
   {
+    rules: {
+      // Параметр с подчёркиванием — сознательно не используется (например, в реализации интерфейса).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+      ],
+    },
+  },
+  {
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-globals': ['error', ...storageGlobals, ...legacyUnsafeGlobals],
