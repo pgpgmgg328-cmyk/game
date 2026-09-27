@@ -65,6 +65,20 @@ export default defineConfig(
     },
   },
   {
+    // Поддельный SDK для автотестов — обычный браузерный скрипт.
+    files: ['e2e/fixtures/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        location: 'readonly',
+        URLSearchParams: 'readonly',
+      },
+    },
+  },
+  {
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-globals': ['error', ...storageGlobals, ...legacyUnsafeGlobals],

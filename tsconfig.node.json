@@ -22,5 +22,12 @@
     "noImplicitOverride": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "scripts", "tests"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "scripts",
+    "tests",
+    "e2e"
+  ]
 }

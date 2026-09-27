@@ -16,13 +16,15 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "e2e": "vite build && playwright test"
   },
   "dependencies": {
     "phaser": "3.90.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.56.1",
     "@types/node": "22.20.4",
     "@types/ysdk": "1.2.0",
     "eslint": "10.11.0",
