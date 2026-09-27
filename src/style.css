@@ -1,3 +1,27 @@
+/*
+ * Шрифт Nunito (SIL Open Font License 1.1, текст лицензии — public/licenses/nunito-OFL.txt).
+ * Файлы из @fontsource-variable/nunito 5.3.0: только латиница и кириллица, вариативная толщина.
+ */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: block;
+  font-weight: 200 1000;
+  src: url('./assets/fonts/nunito-cyrillic-wght-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: block;
+  font-weight: 200 1000;
+  src: url('./assets/fonts/nunito-latin-wght-normal.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Страница не прокручивается, ничего не выделяется, долгий тап не вызывает меню (п. 1.6.1.8, 1.10.2). */
 html,
 body {
