@@ -1,0 +1,32 @@
+[
+  {
+    "id": "no_ads",
+    "title": "Без рекламы",
+    "description": "Убирает рекламу между забегами и баннер. Реклама за награду остаётся по желанию.",
+    "imageURI": "",
+    "price": "99 YAN",
+    "priceCurrencyCode": "YAN",
+    "priceValue": "99",
+    "getPriceCurrencyImage": "return ''"
+  },
+  {
+    "id": "skins_pack",
+    "title": "Набор украшений",
+    "description": "3 скина банки и 2 фона.",
+    "imageURI": "",
+    "price": "49 YAN",
+    "priceCurrencyCode": "YAN",
+    "priceValue": "49",
+    "getPriceCurrencyImage": "return ''"
+  },
+  {
+    "id": "coins_1000",
+    "title": "1000 клацов",
+    "description": "1000 монет для апгрейдов.",
+    "imageURI": "",
+    "price": "29 YAN",
+    "priceCurrencyCode": "YAN",
+    "priceValue": "29",
+    "getPriceCurrencyImage": "return ''"
+  }
+]
