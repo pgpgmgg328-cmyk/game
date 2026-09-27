@@ -1,14 +1,72 @@
 import './style.css';
 import Phaser from 'phaser';
+import { installBrowserGuards } from './game/browserGuards';
+import { CONTEXT_KEY, GameContext, LAYOUT_EVENT } from './game/context';
+import { installE2eHooks } from './game/e2eHooks';
+import { bindLifecycle } from './game/lifecycle';
+import { AlbumScene } from './game/scenes/Album';
+import { BackgroundScene } from './game/scenes/Background';
 import { BootScene } from './game/scenes/Boot';
+import { GameScene } from './game/scenes/Game';
+import { LeaderboardScene } from './game/scenes/Leaderboard';
+import { MenuScene } from './game/scenes/Menu';
+import { PauseScene } from './game/scenes/Pause';
+import { PreloadScene } from './game/scenes/Preload';
+import { ResultScene } from './game/scenes/Result';
+import { SettingsScene } from './game/scenes/Settings';
+import { ShopScene } from './game/scenes/Shop';
+import { UpgradesScene } from './game/scenes/Upgrades';
+import { WorldsScene } from './game/scenes/Worlds';
+import { Viewport } from './game/viewport';
+import { createPlatform } from './platform';
 
-new Phaser.Game({
+const container = document.getElementById('game');
+if (!container) throw new Error('Нет элемента #game');
+
+installBrowserGuards();
+const viewport = new Viewport(container, Viewport.guessDesktop());
+const reducedMotion =
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ctx = new GameContext(createPlatform(), viewport, reducedMotion);
+const initial = viewport.current;
+
+const game = new Phaser.Game({
   type: Phaser.AUTO,
-  parent: 'game',
+  parent: container,
+  width: initial.canvasWidth,
+  height: initial.canvasHeight,
   backgroundColor: '#bfe6ff',
   banner: false,
+  disableContextMenu: true,
   // Звук синтезируем сами через WebAudio после первого жеста игрока, встроенный звук Phaser не нужен.
   audio: { noAudio: true },
-  scale: { mode: Phaser.Scale.RESIZE },
-  scene: [BootScene],
+  // Canvas в физических пикселях (не больше 2 на CSS-пиксель), на экране — в CSS-пикселях.
+  scale: { mode: Phaser.Scale.NONE, zoom: 1 / initial.dpr },
+  callbacks: { preBoot: (booting) => booting.registry.set(CONTEXT_KEY, ctx) },
+  // Порядок важен: сцены ниже по списку рисуются поверх. Фон — самый нижний.
+  scene: [
+    BootScene,
+    BackgroundScene,
+    PreloadScene,
+    MenuScene,
+    GameScene,
+    ResultScene,
+    WorldsScene,
+    AlbumScene,
+    UpgradesScene,
+    ShopScene,
+    LeaderboardScene,
+    SettingsScene,
+    PauseScene,
+  ],
 });
+
+viewport.onChange((layout) => {
+  game.scale.resize(layout.canvasWidth, layout.canvasHeight);
+  game.scale.setZoom(1 / layout.dpr);
+  game.events.emit(LAYOUT_EVENT, layout);
+});
+viewport.start();
+bindLifecycle(ctx, container);
+installE2eHooks(game, ctx);
