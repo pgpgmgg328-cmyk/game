@@ -11,6 +11,15 @@ const storageGlobals = [
   { name: 'YaGames', message: 'SDK Яндекса вызывается только внутри src/platform/.' },
 ];
 
+// API, которых нет в iOS 12–15: сборка понижает только синтаксис, полифилов в игре нет.
+// Остальное (Array.prototype.at, replaceAll и т. п.) отсекает lib ES2019 в tsconfig.app.json.
+const legacyUnsafeGlobals = [
+  {
+    name: 'structuredClone',
+    message: 'Нет в iOS младше 15.4. Для простых данных используйте JSON-копию.',
+  },
+];
+
 const windowProperties = [
   {
     object: 'window',
@@ -49,7 +58,7 @@ export default defineConfig(
   {
     files: ['src/**/*.ts'],
     rules: {
-      'no-restricted-globals': ['error', ...storageGlobals],
+      'no-restricted-globals': ['error', ...storageGlobals, ...legacyUnsafeGlobals],
       'no-restricted-properties': ['error', ...windowProperties, noExternalLinks],
     },
   },
@@ -57,7 +66,7 @@ export default defineConfig(
     // Единственное место, где разрешены SDK Яндекса и хранилище браузера.
     files: ['src/platform/**/*.ts'],
     rules: {
-      'no-restricted-globals': 'off',
+      'no-restricted-globals': ['error', ...legacyUnsafeGlobals],
       'no-restricted-properties': ['error', noExternalLinks],
     },
   },
@@ -72,6 +81,7 @@ export default defineConfig(
       'no-restricted-globals': [
         'error',
         ...storageGlobals,
+        ...legacyUnsafeGlobals,
         { name: 'window', message: 'core/ не должен зависеть от браузера.' },
         { name: 'document', message: 'core/ не должен зависеть от браузера.' },
       ],
