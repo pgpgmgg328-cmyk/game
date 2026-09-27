@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "e2e": "vite build && playwright test"
+    "e2e": "vite build && playwright test",
+    "zip": "vite build && node scripts/zip.ts"
   },
   "dependencies": {
     "phaser": "3.90.0"
