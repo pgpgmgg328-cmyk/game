@@ -50,6 +50,18 @@ describe('CloudWriteScheduler', () => {
     expect(cloud.writes[0]?.at).toBe(0);
   });
 
+  it('flush отправляет накопленные изменения сразу, а без изменений ничего не делает', () => {
+    const { cloud, scheduler } = setup();
+    scheduler.flush();
+    expect(cloud.writes).toHaveLength(0);
+    scheduler.request();
+    scheduler.flush();
+    expect(cloud.writes).toHaveLength(1);
+    expect(cloud.writes[0]?.at).toBe(0);
+    scheduler.flush();
+    expect(cloud.writes).toHaveLength(1);
+  });
+
   it('без изменений ничего не пишет', () => {
     const { clock, cloud } = setup();
     clock.advance(60_000);

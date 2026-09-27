@@ -1,9 +1,11 @@
 import { LocalPlatform } from './LocalPlatform';
 import type { Platform } from './Platform';
+import { YandexPlatform, type YaGamesGlobal } from './YandexPlatform';
 
 export type { DeviceType, Platform } from './Platform';
 
-/** Выбирает площадку для текущего запуска. */
+/** Площадка Яндекса, если загружен /sdk.js, иначе локальная (`npm run dev`, тесты). */
 export function createPlatform(): Platform {
-  return new LocalPlatform();
+  const yaGames = (window as Window & { YaGames?: YaGamesGlobal }).YaGames;
+  return yaGames ? new YandexPlatform({ yaGames }) : new LocalPlatform();
 }

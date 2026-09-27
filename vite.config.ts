@@ -37,6 +37,12 @@ export default defineConfig({
     // Phaser — один большой модуль (~1,2 МБ), предупреждение о размере чанка здесь бесполезно.
     chunkSizeWarningLimit: 2000,
   },
-  server: { port: 5173, strictPort: true },
+  server: {
+    port: 5173,
+    strictPort: true,
+    // При `npm run dev:ya` страница открывается через https-прокси Яндекса на :8080,
+    // а горячая перезагрузка должна подключаться к самому Vite.
+    hmr: { protocol: 'ws', clientPort: 5173 },
+  },
   preview: { port: 4173, strictPort: true },
 });

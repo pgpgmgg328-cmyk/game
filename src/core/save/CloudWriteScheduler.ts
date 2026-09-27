@@ -68,6 +68,12 @@ export class CloudWriteScheduler {
     this.attempt();
   }
 
+  /** Отправить накопленные изменения сразу. Если изменений нет, ничего не делает. */
+  flush(): void {
+    if (!this.dirty) return;
+    this.request(true);
+  }
+
   private attempt(): void {
     if (!this.dirty || this.inFlight) return;
 
