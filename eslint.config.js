@@ -1,0 +1,97 @@
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import { defineConfig, globalIgnores } from 'eslint/config';
+
+const storageGlobals = [
+  { name: 'localStorage', message: 'Хранилище браузера используется только внутри src/platform/.' },
+  {
+    name: 'sessionStorage',
+    message: 'Хранилище браузера используется только внутри src/platform/.',
+  },
+  { name: 'YaGames', message: 'SDK Яндекса вызывается только внутри src/platform/.' },
+];
+
+const windowProperties = [
+  {
+    object: 'window',
+    property: 'localStorage',
+    message: 'Хранилище браузера используется только внутри src/platform/.',
+  },
+  {
+    object: 'window',
+    property: 'sessionStorage',
+    message: 'Хранилище браузера используется только внутри src/platform/.',
+  },
+  {
+    object: 'window',
+    property: 'YaGames',
+    message: 'SDK Яндекса вызывается только внутри src/platform/.',
+  },
+];
+
+const noExternalLinks = {
+  object: 'window',
+  property: 'open',
+  message: 'Внешние ссылки запрещены требованиями Яндекса (п. 8.4).',
+};
+
+export default defineConfig(
+  globalIgnores([
+    'dist/',
+    'release/',
+    'node_modules/',
+    'test-results/',
+    'playwright-report/',
+    'docs/',
+  ]),
+  js.configs.recommended,
+  tseslint.configs.recommended,
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-globals': ['error', ...storageGlobals],
+      'no-restricted-properties': ['error', ...windowProperties, noExternalLinks],
+    },
+  },
+  {
+    // Единственное место, где разрешены SDK Яндекса и хранилище браузера.
+    files: ['src/platform/**/*.ts'],
+    rules: {
+      'no-restricted-globals': 'off',
+      'no-restricted-properties': ['error', noExternalLinks],
+    },
+  },
+  {
+    // core/ — чистая логика: без Phaser и без браузерного окружения, чтобы тестировать её в Node.
+    files: ['src/core/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: 'phaser', message: 'core/ не должен зависеть от Phaser.' }] },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...storageGlobals,
+        { name: 'window', message: 'core/ не должен зависеть от браузера.' },
+        { name: 'document', message: 'core/ не должен зависеть от браузера.' },
+      ],
+    },
+  },
+  {
+    // Сцены знают только интерфейс Platform, а не конкретные реализации.
+    files: ['src/game/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/platform/YandexPlatform*', '**/platform/LocalPlatform*'],
+              message: 'Сцены работают только через интерфейс Platform.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+);

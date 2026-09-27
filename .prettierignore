@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+e2e/__screens__/
+package-lock.json
+# Документы редактируются вручную, автоформат не нужен.
+*.md

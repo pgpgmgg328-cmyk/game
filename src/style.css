@@ -1,0 +1,34 @@
+/* Страница не прокручивается, ничего не выделяется, долгий тап не вызывает меню (п. 1.6.1.8, 1.10.2). */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Цвет совпадает с фоном игры, чтобы при загрузке не мелькала чёрная или белая заливка. */
+  background: #bfe6ff;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#game canvas {
+  display: block;
+  outline: none;
+  touch-action: none;
+}
