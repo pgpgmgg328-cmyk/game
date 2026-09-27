@@ -61,8 +61,13 @@ export class PauseScene extends BaseScene {
   }
 
   protected layoutScreen(height: number): void {
-    this.shade.setSize(720, height);
-    if (this.shade.input) this.shade.input.hitArea.setSize(720, height);
+    // Затемнение на весь экран, включая фон по бокам от колонки.
+    const { canvasWidth, canvasHeight, column, scale } = this.ctx.layout;
+    const shadeWidth = canvasWidth / scale;
+    const shadeHeight = canvasHeight / scale;
+    this.shade.setPosition(-column.x / scale, -column.y / scale);
+    this.shade.setSize(shadeWidth, shadeHeight);
+    if (this.shade.input) this.shade.input.hitArea.setSize(shadeWidth, shadeHeight);
 
     const gap = height < 1000 ? 14 : 24;
     const buttonHeight = 110;

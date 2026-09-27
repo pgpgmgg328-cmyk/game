@@ -31,6 +31,8 @@ export class GameScene extends BaseScene {
     this.addCleanup(
       pause.subscribe({
         onPausedChange: (paused) => {
+          // Пока открыт экран паузы, своя кнопка паузы не нужна и не должна выглядывать из-под окна.
+          this.pauseButton.setVisible(!pause.isUserPaused);
           if (paused && this.sys.isActive()) this.scene.pause();
           else if (!paused && this.sys.isPaused()) this.scene.resume();
         },
