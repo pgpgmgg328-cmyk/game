@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { readSave, type Migration } from '../src/core/save/migrate';
 import { restoreSave } from '../src/core/save/restore';
 import { SaveManager, type SaveUrgency } from '../src/core/save/SaveManager';
-import { createDefaultSave, sanitizeV1, type Save } from '../src/core/save/schema';
+import { createDefaultSave, sanitizeSave, type Save } from '../src/core/save/schema';
 
 describe('readSave', () => {
   it('считает отсутствие данных пустым сохранением', () => {
@@ -11,7 +11,12 @@ describe('readSave', () => {
   });
 
   it('читает корректное сохранение текущей версии', () => {
-    const save: Save = { v: 1, rev: 7, settings: { sound: false, music: true } };
+    const save: Save = {
+      v: 2,
+      rev: 7,
+      settings: { sound: false, music: true },
+      stats: { bestScore: 1234, runs: 5 },
+    };
     expect(readSave(save)).toEqual({ kind: 'ok', save });
   });
 
@@ -28,17 +33,40 @@ describe('readSave', () => {
   });
 
   it('заменяет битые поля значениями по умолчанию и сохраняет остальные', () => {
-    const result = readSave({ v: 1, rev: -5, settings: { sound: 'нет', music: false }, junk: 1 });
+    const result = readSave({
+      v: 2,
+      rev: -5,
+      settings: { sound: 'нет', music: false },
+      stats: { bestScore: 1.5, runs: 3 },
+      junk: 1,
+    });
     expect(result).toEqual({
       kind: 'ok',
-      save: { v: 1, rev: 0, settings: { sound: true, music: false } },
+      save: {
+        v: 2,
+        rev: 0,
+        settings: { sound: true, music: false },
+        stats: { bestScore: 0, runs: 3 },
+      },
     });
   });
 
-  it('не падает, если settings — не объект', () => {
-    expect(readSave({ v: 1, rev: 3, settings: null })).toEqual({
+  it('не падает, если settings и stats — не объекты', () => {
+    expect(readSave({ v: 2, rev: 3, settings: null, stats: 'много' })).toEqual({
       kind: 'ok',
-      save: { v: 1, rev: 3, settings: { sound: true, music: true } },
+      save: { ...createDefaultSave(), rev: 3 },
+    });
+  });
+
+  it('сохранение версии 1 переводится в версию 2 с сохранением настроек', () => {
+    expect(readSave({ v: 1, rev: 9, settings: { sound: false, music: true } })).toEqual({
+      kind: 'ok',
+      save: {
+        v: 2,
+        rev: 9,
+        settings: { sound: false, music: true },
+        stats: { bestScore: 0, runs: 0 },
+      },
     });
   });
 
@@ -69,11 +97,11 @@ describe('readSave', () => {
     };
     const result = readSave(
       { v: 0, rev: 2, mute: true },
-      { migrations, version: 1, sanitize: sanitizeV1 },
+      { migrations, version: 1, sanitize: sanitizeSave },
     );
     expect(result).toEqual({
       kind: 'ok',
-      save: { v: 1, rev: 2, settings: { sound: false, music: true } },
+      save: { ...createDefaultSave(), rev: 2, settings: { sound: false, music: true } },
     });
   });
 
@@ -102,9 +130,10 @@ describe('readSave', () => {
 
 describe('restoreSave', () => {
   const save = (rev: number, sound = true): Save => ({
-    v: 1,
+    v: 2,
     rev,
     settings: { sound, music: true },
+    stats: { bestScore: rev * 10, runs: rev },
   });
 
   it('без данных начинает с сохранения по умолчанию', () => {
@@ -141,7 +170,7 @@ describe('restoreSave', () => {
   });
 
   it('не разрешает запись, если где-то лежит сохранение новее версии игры', () => {
-    expect(restoreSave({ cloud: { v: 2, rev: 10 }, local: save(1) })).toEqual({
+    expect(restoreSave({ cloud: { v: 3, rev: 10 }, local: save(1) })).toEqual({
       save: save(1),
       writable: false,
       source: 'local',
@@ -174,7 +203,7 @@ describe('SaveManager', () => {
     expect(manager.data.settings.sound).toBe(false);
     expect(manager.data.rev).toBe(1);
     expect(store.persist).toHaveBeenCalledWith(
-      { v: 1, rev: 1, settings: { sound: false, music: true } },
+      { ...createDefaultSave(), rev: 1, settings: { sound: false, music: true } },
       'normal',
     );
     manager.update((draft) => {
@@ -182,7 +211,7 @@ describe('SaveManager', () => {
     }, 'urgent');
     expect(manager.data.rev).toBe(2);
     expect(store.persist).toHaveBeenLastCalledWith(
-      { v: 1, rev: 2, settings: { sound: false, music: false } },
+      { ...createDefaultSave(), rev: 2, settings: { sound: false, music: false } },
       'urgent',
     );
   });

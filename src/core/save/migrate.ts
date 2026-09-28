@@ -1,10 +1,13 @@
-import { SAVE_VERSION, isJsonObject, sanitizeV1, type JsonObject, type Save } from './schema';
+import { SAVE_VERSION, isJsonObject, sanitizeSave, type JsonObject, type Save } from './schema';
 
 /** Переводит данные из версии N в N + 1 и выставляет v: N + 1. */
 export type Migration = (data: JsonObject) => JsonObject;
 
-/** Миграции по версии, из которой переводим. Пока версия схемы одна, список пуст. */
-export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+/** Миграции по версии, из которой переводим. */
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {
+  // v1 → v2 (M1): появилась статистика — рекорд и число забегов.
+  1: (data) => ({ ...data, v: 2, stats: { bestScore: 0, runs: 0 } }),
+};
 
 export type ReadResult =
   | { kind: 'ok'; save: Save }
@@ -24,7 +27,7 @@ export interface ReadOptions {
 const DEFAULT_READ_OPTIONS: ReadOptions = {
   migrations: MIGRATIONS,
   version: SAVE_VERSION,
-  sanitize: sanitizeV1,
+  sanitize: sanitizeSave,
 };
 
 /** Читает сохранение любой известной версии и приводит его к текущей. Никогда не бросает исключений. */
