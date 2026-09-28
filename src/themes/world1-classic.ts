@@ -73,7 +73,7 @@ export const WORLD1_CLASSIC: ThemeData = {
       label: { kind: 'text', text: 'CAPS' },
       size: { w: 2.8, h: 2.1 },
       paint: { kind: 'solid', color: '#ffa8d2' },
-      face: { eyes: 'big', brows: 'raised', mouth: 'shout', blush: false },
+      face: { eyes: 'big', brows: 'none', mouth: 'shout', blush: false },
       sound: { kind: 'clack', pitch: 392, volume: 0.9 },
     },
     {
