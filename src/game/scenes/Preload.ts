@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
+import { offerableSnapshot } from '../../core/run/snapshot';
 import { restoreSave } from '../../core/save/restore';
 import { SaveManager } from '../../core/save/SaveManager';
 import { resolveLang } from '../../i18n';
+import { RUN } from '../../config/balance';
+import { getTheme, maxTier } from '../../themes';
 import { loadFonts } from '../fonts';
 import { COLORS } from '../ui/theme';
 import { BaseScene } from './BaseScene';
@@ -62,6 +65,16 @@ export class PreloadScene extends BaseScene {
     const sources = await ctx.platform.loadSave();
     ctx.setSave(new SaveManager(restoreSave(sources), ctx.platform));
     ctx.audio.setSettings(ctx.save.data.settings);
+    // Прерванный забег: предложим продолжить, а битый или пустой снимок просто уберём.
+    ctx.pendingRun = offerableSnapshot(
+      ctx.platform.loadRunSnapshot(),
+      (world) => {
+        const theme = getTheme(world);
+        return theme ? maxTier(theme) : null;
+      },
+      RUN.maxSnapshotKeys,
+    );
+    if (!ctx.pendingRun) ctx.platform.saveRunSnapshot(null);
     this.advance(0.3);
 
     this.scene.start('Menu');

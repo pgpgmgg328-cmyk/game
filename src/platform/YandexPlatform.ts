@@ -4,13 +4,16 @@ import {
   type CloudWriteOptions,
   type SchedulerClock,
 } from '../core/save/CloudWriteScheduler';
+import type { RunSnapshot } from '../core/run/snapshot';
 import type { SaveSources } from '../core/save/restore';
 import type { SaveUrgency } from '../core/save/SaveManager';
 import type { Save } from '../core/save/schema';
 import {
+  RUN_STORAGE_KEY,
   SAVE_STORAGE_KEY,
   browserStorage,
   readJson,
+  removeItem,
   writeJson,
   type StorageLike,
 } from './localCache';
@@ -144,6 +147,15 @@ export class YandexPlatform implements Platform {
 
   flush(): void {
     this.cloud.flush();
+  }
+
+  loadRunSnapshot(): unknown {
+    return readJson(this.storage, RUN_STORAGE_KEY);
+  }
+
+  saveRunSnapshot(snapshot: RunSnapshot | null): void {
+    if (snapshot) writeJson(this.storage, RUN_STORAGE_KEY, snapshot);
+    else removeItem(this.storage, RUN_STORAGE_KEY);
   }
 
   private writeCloud(): Promise<void> {

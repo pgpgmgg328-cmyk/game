@@ -6,7 +6,7 @@ import { DangerTracker } from '../src/core/run/danger';
 import { mergeResult, mergeScore, planMerges } from '../src/core/run/merge';
 import { Rng } from '../src/core/run/rng';
 import { applyRunResult } from '../src/core/run/result';
-import { readRunSnapshot, type RunSnapshot } from '../src/core/run/snapshot';
+import { offerableSnapshot, readRunSnapshot, type RunSnapshot } from '../src/core/run/snapshot';
 import { KeyQueue, pickTier, spawnWeightsAt } from '../src/core/run/spawn';
 
 describe('Rng', () => {
@@ -228,6 +228,15 @@ describe('снимок забега', () => {
 
   it('правильный снимок читается как есть', () => {
     expect(readRunSnapshot(JSON.parse(JSON.stringify(valid)), limits)).toEqual(valid);
+  });
+
+  it('продолжить предлагается только целый забег известного мира, где уже был сброс', () => {
+    const maxTierOf = (world: string) => (world === 'classic' ? 11 : null);
+    expect(offerableSnapshot(valid, maxTierOf, 150)).toEqual(valid);
+    expect(offerableSnapshot({ ...valid, world: 'space' }, maxTierOf, 150)).toBeNull();
+    expect(offerableSnapshot({ ...valid, drops: 0 }, maxTierOf, 150)).toBeNull();
+    expect(offerableSnapshot({ ...valid, current: 11 }, () => 5, 150)).toBeNull();
+    expect(offerableSnapshot('мусор', maxTierOf, 150)).toBeNull();
   });
 
   it('битые данные дают null, игра не падает', () => {

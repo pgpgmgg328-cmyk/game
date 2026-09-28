@@ -1,3 +1,4 @@
+import type { RunSnapshot } from '../core/run/snapshot';
 import type { SaveSources } from '../core/save/restore';
 import type { SaveBackend } from '../core/save/SaveManager';
 
@@ -33,4 +34,10 @@ export interface Platform extends SaveBackend {
 
   /** Сохранения из облака и из локального кэша (выбирает между ними core/save/restore). */
   loadSave(): Promise<SaveSources>;
+
+  /** Снимок текущего забега из локального кэша, как есть (проверяет core/run/snapshot). */
+  loadRunSnapshot(): unknown;
+
+  /** Записать снимок текущего забега или удалить его (null). */
+  saveRunSnapshot(snapshot: RunSnapshot | null): void;
 }

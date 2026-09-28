@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { AudioEngine } from '../audio/AudioEngine';
 import type { Layout } from '../core/layout';
+import type { RunSnapshot } from '../core/run/snapshot';
 import { PauseController } from '../core/pause/PauseController';
 import type { SaveManager } from '../core/save/SaveManager';
 import { createTranslator, type Lang, type Translate } from '../i18n';
@@ -22,6 +23,8 @@ export class GameContext {
   /** Игрок попросил браузер убрать лишнюю анимацию (prefers-reduced-motion). */
   readonly reducedMotion: boolean;
   lang: Lang = 'ru';
+  /** Забег, прерванный перезагрузкой страницы: меню предложит его продолжить. */
+  pendingRun: RunSnapshot | null = null;
   t: Translate = createTranslator('ru');
   private saveManager: SaveManager | null = null;
 

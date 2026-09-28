@@ -119,3 +119,19 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
     keys,
   };
 }
+
+/**
+ * Снимок, который стоит предложить продолжить: целый, из известного мира, с тирами этого мира
+ * и хотя бы одним сбросом. maxTierOf возвращает число форм мира или null, если мира нет.
+ */
+export function offerableSnapshot(
+  raw: unknown,
+  maxTierOf: (world: string) => number | null,
+  maxKeys: number,
+): RunSnapshot | null {
+  if (!isJsonObject(raw) || typeof raw.world !== 'string') return null;
+  const maxTier = maxTierOf(raw.world);
+  if (maxTier === null) return null;
+  const snapshot = readRunSnapshot(raw, { maxTier, maxKeys });
+  return snapshot && snapshot.drops > 0 ? snapshot : null;
+}

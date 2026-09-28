@@ -2,10 +2,17 @@
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem(key: string): void;
 }
 
 /** Ключ, под которым лежит локальная копия сохранения. */
 export const SAVE_STORAGE_KEY = 'squishy-keys:save';
+
+/**
+ * Ключ снимка текущего забега. Снимок хранится только локально: запись каждые 5 с в облако
+ * съела бы лимит запросов player.setData (docs/PROGRESS.md, «Принятые решения»).
+ */
+export const RUN_STORAGE_KEY = 'squishy-keys:run';
 
 /**
  * localStorage, если он доступен. В приватном режиме или при запрете данных сайта браузер
@@ -31,6 +38,16 @@ export function readJson(storage: StorageLike | null, key: string): unknown {
     return raw === null ? null : (JSON.parse(raw) as unknown);
   } catch {
     return null;
+  }
+}
+
+/** Удаляет запись. Ошибки хранилища игнорируются. */
+export function removeItem(storage: StorageLike | null, key: string): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Хранилище недоступно: удалять нечего.
   }
 }
 

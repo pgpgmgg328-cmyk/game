@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DROP, JAR, SQUISH } from '../../config/balance';
+import { DROP, JAR, RUN, SQUISH } from '../../config/balance';
 import { actionForKey } from '../../core/input';
 import { applyRunResult } from '../../core/run/result';
 import type { RunSnapshot } from '../../core/run/snapshot';
@@ -88,6 +88,7 @@ export class GameScene extends BaseScene {
   private ending = false;
   private frozen = false;
   private clock = 0;
+  private snapshotTimer = 0;
 
   constructor() {
     super('Game');
@@ -112,7 +113,12 @@ export class GameScene extends BaseScene {
     this.updateScore(true);
 
     this.addCleanup(this.run.on((event) => this.onRunEvent(event)));
+    this.addCleanup(() => this.abandonIfUnfinished());
     this.addCleanup(() => this.run.destroy());
+    const onPageHide = (): void => this.saveSnapshot();
+    window.addEventListener('pagehide', onPageHide);
+    this.addCleanup(() => window.removeEventListener('pagehide', onPageHide));
+    this.saveSnapshot();
     this.bindInput();
     this.bindPause();
     this.layoutScreen(this.screenHeight);
@@ -125,6 +131,13 @@ export class GameScene extends BaseScene {
       if (direction !== 0) this.run.moveAim((direction * DROP.keyboardSpeed * delta) / 1000);
     }
     const alpha = this.frozen ? 1 : this.run.update(delta);
+    if (!this.frozen && !this.ending) {
+      this.snapshotTimer += delta;
+      if (this.snapshotTimer >= RUN.snapshotIntervalMs) {
+        this.snapshotTimer = 0;
+        this.saveSnapshot();
+      }
+    }
     this.renderKeys(alpha);
     this.renderHanging(time);
     this.danger.tick(time, this.run.dangerMs, this.ctx.reducedMotion);
@@ -191,6 +204,7 @@ export class GameScene extends BaseScene {
     this.held = new Set();
     this.ending = false;
     this.frozen = false;
+    this.snapshotTimer = 0;
   }
 
   private buildJar(): void {
@@ -457,6 +471,7 @@ export class GameScene extends BaseScene {
     this.ctx.audio.gameOver();
 
     const { ctx } = this;
+    ctx.platform.saveRunSnapshot(null);
     const stats = this.run.getStats();
     const outcome = applyRunResult(ctx.save.data.stats, stats.score, true);
     ctx.save.update((draft) => {
@@ -492,6 +507,27 @@ export class GameScene extends BaseScene {
       this.tweens.add({ targets: banner, scale: 1, duration: 320, ease: 'Back.easeOut' });
     }
     return banner;
+  }
+
+  // ── Снимок забега ────────────────────────────────────────────────────────────────────
+
+  /** Снимок текущего забега в локальный кэш: после перезагрузки его предложат продолжить. */
+  private saveSnapshot(): void {
+    if (this.ending || this.run.over) return;
+    this.ctx.platform.saveRunSnapshot(this.run.snapshot());
+  }
+
+  /** Выход в меню посреди забега: снимок больше не нужен, но хороший счёт становится рекордом. */
+  private abandonIfUnfinished(): void {
+    if (this.ending) return;
+    const { ctx } = this;
+    ctx.platform.saveRunSnapshot(null);
+    const outcome = applyRunResult(ctx.save.data.stats, this.run.score, false);
+    if (outcome.newRecord) {
+      ctx.save.update((draft) => {
+        draft.stats = outcome.stats;
+      });
+    }
   }
 
   // ── Ввод ─────────────────────────────────────────────────────────────────────────────
@@ -573,6 +609,8 @@ export class GameScene extends BaseScene {
             // Отпущенные во время паузы клавиши и пальцы не должны «залипнуть».
             this.held.clear();
             this.gesture = null;
+            // Снимок забега при любой паузе, в том числе при скрытии вкладки.
+            this.saveSnapshot();
           }
           if (paused && this.sys.isActive()) this.scene.pause();
           else if (!paused && this.sys.isPaused()) this.scene.resume();

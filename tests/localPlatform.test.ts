@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultSave } from '../src/core/save/schema';
-import { SAVE_STORAGE_KEY, readJson, writeJson } from '../src/platform/localCache';
+import { RUN_STORAGE_KEY, SAVE_STORAGE_KEY, readJson, writeJson } from '../src/platform/localCache';
 import { LocalPlatform } from '../src/platform/LocalPlatform';
 import { MemoryStorage } from './memoryStorage';
 
@@ -61,6 +61,34 @@ describe('LocalPlatform', () => {
     const platform = await platformWith(null);
     expect(() => platform.persist(createDefaultSave())).not.toThrow();
     expect(await platform.loadSave()).toEqual({ cloud: null, local: null });
+  });
+
+  it('снимок забега пишется, читается и удаляется локально', async () => {
+    const storage = new MemoryStorage();
+    const platform = await platformWith(storage);
+    expect(platform.loadRunSnapshot()).toBeNull();
+    const snapshot = {
+      v: 1 as const,
+      world: 'classic',
+      seed: 1,
+      rng: 2,
+      score: 30,
+      elapsedMs: 5000,
+      drops: 4,
+      merges: 1,
+      bestTier: 2,
+      current: 1,
+      upcoming: [2],
+      aimX: 300,
+      keys: [],
+    };
+    platform.saveRunSnapshot(snapshot);
+    expect(storage.items.has(RUN_STORAGE_KEY)).toBe(true);
+    expect(platform.loadRunSnapshot()).toEqual(snapshot);
+    platform.saveRunSnapshot(null);
+    expect(storage.items.has(RUN_STORAGE_KEY)).toBe(false);
+    storage.failWrites = true;
+    expect(() => platform.saveRunSnapshot(null)).not.toThrow();
   });
 
   it('методы площадки можно вызывать сколько угодно раз', async () => {

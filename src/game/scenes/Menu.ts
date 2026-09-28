@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
-import type { TranslationKey } from '../../i18n';
+import { applyRunResult } from '../../core/run/result';
+import type { RunSnapshot } from '../../core/run/snapshot';
+import { formatNumber, type TranslationKey } from '../../i18n';
 import { Button } from '../ui/Button';
+import { COLORS } from '../ui/theme';
 import { BaseScene } from './BaseScene';
 import { titleStyle } from './titleStyle';
 
@@ -16,10 +19,22 @@ const MENU_ITEMS: readonly { key: TranslationKey; scene: string }[] = [
 /** На низком экране (телефон в альбомной ориентации) кнопки встают в три колонки вместо двух. */
 const COMPACT_HEIGHT = 1000;
 
+/** Окно «Продолжить забег?» после перезагрузки страницы посреди забега. */
+interface ResumeDialog {
+  snapshot: RunSnapshot;
+  shade: Phaser.GameObjects.Rectangle;
+  panel: Phaser.GameObjects.Graphics;
+  title: Phaser.GameObjects.Text;
+  score: Phaser.GameObjects.Text;
+  yes: Button;
+  no: Button;
+}
+
 export class MenuScene extends BaseScene {
   private title!: Phaser.GameObjects.Text;
   private play!: Button;
   private items: Button[] = [];
+  private resume: ResumeDialog | null = null;
 
   constructor() {
     super('Menu');
@@ -52,7 +67,13 @@ export class MenuScene extends BaseScene {
           onClick: () => this.scene.start(item.scene),
         }),
     );
+    this.resume = null;
     this.onKeyAction((action) => {
+      if (this.resume) {
+        if (action === 'drop') this.answerResume(true);
+        if (action === 'pause') this.answerResume(false);
+        return;
+      }
       if (action === 'drop') this.startGame();
     });
     this.layoutScreen(this.screenHeight);
@@ -67,6 +88,8 @@ export class MenuScene extends BaseScene {
         ease: 'Sine.easeInOut',
       });
     }
+
+    if (this.ctx.pendingRun) this.openResume(this.ctx.pendingRun);
 
     // LoadingAPI.ready(): меню нарисовано и принимает ввод (п. 1.19.2). Повторные вызовы игнорируются.
     this.game.events.once(Phaser.Core.Events.POST_RENDER, () => this.ctx.platform.ready());
@@ -105,9 +128,102 @@ export class MenuScene extends BaseScene {
         gridTop + itemHeight / 2 + row * (itemHeight + gap),
       );
     });
+    this.layoutResume(height);
   }
 
   private startGame(): void {
     this.scene.start('Game');
+  }
+
+  /** «Продолжить забег?» — после перезагрузки страницы посреди забега (CLAUDE.md, «Сохранения»). */
+  private openResume(snapshot: RunSnapshot): void {
+    const { t, lang } = this.ctx;
+    // Затемнение ловит нажатия, чтобы они не проходили к меню.
+    const shade = this.add.rectangle(0, 0, 720, 100, COLORS.dim, 0.45).setOrigin(0, 0);
+    shade.setInteractive();
+    const panel = this.add.graphics();
+    const title = this.createText(360, 0, t('resume.title'), titleStyle(46)).setOrigin(0.5);
+    const score = this.createText(
+      360,
+      0,
+      t('resume.score', { score: formatNumber(snapshot.score, lang) }),
+      { fontSize: '38px', fontStyle: '800', color: COLORS.title },
+    ).setOrigin(0.5);
+    const yes = new Button(this, 360, 0, {
+      id: 'resume.yes',
+      label: t('resume.yes'),
+      width: 420,
+      variant: 'primary',
+      onClick: () => this.answerResume(true),
+    });
+    const no = new Button(this, 360, 0, {
+      id: 'resume.no',
+      label: t('resume.no'),
+      width: 420,
+      onClick: () => this.answerResume(false),
+    });
+    this.resume = { snapshot, shade, panel, title, score, yes, no };
+    this.setMenuEnabled(false);
+    this.layoutScreen(this.screenHeight);
+  }
+
+  private answerResume(accept: boolean): void {
+    const dialog = this.resume;
+    if (!dialog) return;
+    this.resume = null;
+    this.ctx.pendingRun = null;
+    for (const item of [
+      dialog.shade,
+      dialog.panel,
+      dialog.title,
+      dialog.score,
+      dialog.yes,
+      dialog.no,
+    ]) {
+      item.destroy();
+    }
+    if (accept) {
+      this.scene.start('Game', { snapshot: dialog.snapshot });
+      return;
+    }
+    // Забег не продолжаем, но его счёт мог быть рекордом.
+    const { ctx } = this;
+    ctx.platform.saveRunSnapshot(null);
+    const outcome = applyRunResult(ctx.save.data.stats, dialog.snapshot.score, false);
+    if (outcome.newRecord) {
+      ctx.save.update((draft) => {
+        draft.stats = outcome.stats;
+      });
+    }
+    this.setMenuEnabled(true);
+  }
+
+  private setMenuEnabled(enabled: boolean): void {
+    for (const button of [this.play, ...this.items]) {
+      if (enabled) button.setInteractive();
+      else button.disableInteractive();
+    }
+  }
+
+  private layoutResume(height: number): void {
+    const dialog = this.resume;
+    if (!dialog) return;
+    const { canvasWidth, canvasHeight, column, scale } = this.ctx.layout;
+    const shadeWidth = canvasWidth / scale;
+    const shadeHeight = canvasHeight / scale;
+    dialog.shade.setPosition(-column.x / scale, -column.y / scale);
+    dialog.shade.setSize(shadeWidth, shadeHeight);
+    if (dialog.shade.input) dialog.shade.input.hitArea.setSize(shadeWidth, shadeHeight);
+
+    const gap = height < COMPACT_HEIGHT ? 14 : 24;
+    const contentHeight = 110 + 64 + gap + 110 + gap + 110;
+    const top = Math.max(24, (height - contentHeight) / 2);
+    dialog.panel.clear();
+    dialog.panel.fillStyle(COLORS.panel, 0.95);
+    dialog.panel.fillRoundedRect(60, top - 28, 600, contentHeight + 56, 40);
+    dialog.title.setPosition(360, top + 50);
+    dialog.score.setPosition(360, top + 110 + 20);
+    dialog.yes.setPosition(360, top + 110 + 64 + gap + 55);
+    dialog.no.setPosition(360, dialog.yes.y + 110 + gap);
   }
 }

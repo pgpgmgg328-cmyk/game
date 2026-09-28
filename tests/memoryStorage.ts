@@ -15,4 +15,9 @@ export class MemoryStorage implements StorageLike {
     if (this.failWrites) throw new Error('QuotaExceededError');
     this.items.set(key, value);
   }
+
+  removeItem(key: string): void {
+    if (this.failWrites) throw new Error('SecurityError');
+    this.items.delete(key);
+  }
 }

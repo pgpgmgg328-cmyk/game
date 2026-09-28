@@ -106,4 +106,6 @@ export const PHYSICS = {
 /** Снимок текущего забега (CLAUDE.md, «Сохранения»). */
 export const RUN = {
   snapshotIntervalMs: 5000,
+  /** В банке помещается около 70 клавиш; снимок с большим числом считаем битым. */
+  maxSnapshotKeys: 200,
 } as const;
