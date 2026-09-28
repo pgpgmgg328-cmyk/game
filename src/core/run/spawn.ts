@@ -82,6 +82,11 @@ export class KeyQueue {
     return { current: this.currentTier, upcoming: [...this.next] };
   }
 
+  /** Заменить висящую клавишу (обучение в M2, автотесты). Очередь не меняется. */
+  replaceCurrent(tier: number): void {
+    this.currentTier = tier;
+  }
+
   /** Текущая клавиша сброшена: следующая встаёт на её место, в конец очереди добавляется новая. */
   advance(elapsedSec: number): number {
     const next = this.next.shift();
