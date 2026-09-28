@@ -10,7 +10,9 @@ export function bindLifecycle(ctx: GameContext, gameElement: HTMLElement): void 
 
   pause.subscribe({
     onGameplayChange: (active) => (active ? platform.gameplayStart() : platform.gameplayStop()),
+    onAudioMutedChange: (muted) => ctx.audio.setSystemMuted(muted),
   });
+  ctx.audio.bindUnlock(window);
 
   const syncVisibility = (): void => {
     const hidden = document.visibilityState === 'hidden';

@@ -61,6 +61,7 @@ export class PreloadScene extends BaseScene {
 
     const sources = await ctx.platform.loadSave();
     ctx.setSave(new SaveManager(restoreSave(sources), ctx.platform));
+    ctx.audio.setSettings(ctx.save.data.settings);
     this.advance(0.3);
 
     this.scene.start('Menu');

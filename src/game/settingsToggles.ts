@@ -16,4 +16,5 @@ export function toggleSetting(ctx: GameContext, setting: ToggleSetting): void {
   ctx.save.update((draft) => {
     draft.settings[setting] = !draft.settings[setting];
   });
+  ctx.audio.setSettings(ctx.save.data.settings);
 }

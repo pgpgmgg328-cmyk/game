@@ -38,6 +38,7 @@ export class ResultScene extends BaseScene {
   private menu!: Button;
   private keyScale = 1;
   private shown = 0;
+  private lastTick = 0;
   private counting = 0;
   private revealed = false;
 
@@ -115,7 +116,12 @@ export class ResultScene extends BaseScene {
     if (this.revealed) return;
     this.counting = Math.min(COUNT_MS, this.counting + delta);
     const progress = 1 - (1 - this.counting / COUNT_MS) ** 3;
-    this.shown = Math.round(this.summary.score * progress);
+    const next = Math.round(this.summary.score * progress);
+    if (next !== this.shown && time - this.lastTick > 80) {
+      this.ctx.audio.tick();
+      this.lastTick = time;
+    }
+    this.shown = next;
     this.scoreText.setText(formatNumber(this.shown, this.ctx.lang));
     if (this.counting >= COUNT_MS) this.finishCount();
   }
@@ -153,6 +159,7 @@ export class ResultScene extends BaseScene {
     this.scoreText.setText(formatNumber(this.shown, lang));
     this.recordText.setAlpha(1);
     if (this.summary.newRecord) {
+      this.ctx.audio.record();
       this.recordText.setText(t('result.newRecord'));
       this.recordText.setColor('#e0457b');
       this.fx.celebrate(this.recordText.x, this.recordText.y);

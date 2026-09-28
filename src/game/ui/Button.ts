@@ -31,6 +31,8 @@ export interface ButtonHost extends Phaser.Scene {
     addToScene?: boolean,
   ): Phaser.GameObjects.Text;
   registerButton(button: Button): void;
+  /** Мягкий щелчок при нажатии. */
+  playButtonSound(): void;
 }
 
 const PALETTE: Record<ButtonVariant, { face: number; side: number; text: string }> = {
@@ -101,7 +103,9 @@ export class Button extends Phaser.GameObjects.Container {
     this.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, () => {
       const wasPressed = this.pressed;
       this.setPressed(false);
-      if (wasPressed) options.onClick();
+      if (!wasPressed) return;
+      scene.playButtonSound();
+      options.onClick();
     });
 
     scene.add.existing(this);

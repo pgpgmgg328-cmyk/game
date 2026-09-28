@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { AudioEngine } from '../audio/AudioEngine';
 import type { Layout } from '../core/layout';
 import { PauseController } from '../core/pause/PauseController';
 import type { SaveManager } from '../core/save/SaveManager';
@@ -16,6 +17,8 @@ export class GameContext {
   readonly platform: Platform;
   readonly viewport: Viewport;
   readonly pause = new PauseController();
+  /** Синтез звука и музыки (включается по первому жесту игрока). */
+  readonly audio = new AudioEngine();
   /** Игрок попросил браузер убрать лишнюю анимацию (prefers-reduced-motion). */
   readonly reducedMotion: boolean;
   lang: Lang = 'ru';

@@ -32,6 +32,7 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     settings: () => (ctx.saveLoaded ? ctx.save.data.settings : null),
     paused: () => ctx.pause.isPaused,
     gameplayActive: () => ctx.pause.isGameplayActive,
+    audio: () => ctx.audio.state,
     buttons: (): E2eButton[] => collectButtons(game, ctx),
     /** Состояние забега или null, если экран забега не открыт. */
     run: () => gameScene()?.debugState() ?? null,

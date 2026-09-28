@@ -4,7 +4,7 @@ import { actionForKey } from '../../core/input';
 import { applyRunResult } from '../../core/run/result';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber } from '../../i18n';
-import { DEFAULT_THEME_ID, THEMES, getTheme, type ThemeData } from '../../themes';
+import { DEFAULT_THEME_ID, THEMES, formOf, getTheme, type ThemeData } from '../../themes';
 import { hexToNumber } from '../art/color';
 import { ensureFxArt, ensureThemeArt, type KeyArt } from '../art/textures';
 import { e2eSeed } from '../e2eParams';
@@ -361,6 +361,7 @@ export class GameScene extends BaseScene {
       case 'drop': {
         const view = this.createView(event.key);
         view.squash(-0.25);
+        this.ctx.audio.drop();
         this.hanging?.destroy();
         this.hanging = null;
         this.updatePreview();
@@ -371,6 +372,7 @@ export class GameScene extends BaseScene {
         break;
       case 'land':
         this.views.get(event.key.id)?.squash(Math.min(1, event.speed / 12));
+        this.ctx.audio.land(event.speed, event.key.tier);
         break;
       case 'impact': {
         const last = this.lastImpact.get(event.key.id) ?? Number.NEGATIVE_INFINITY;
@@ -386,6 +388,7 @@ export class GameScene extends BaseScene {
         const view = this.views.get(event.key.id);
         view?.squash(0.9);
         view?.showFace('squish', 280);
+        this.ctx.audio.squish(event.key.tier);
         this.fx.squish(event.key.body.position.x, event.key.body.bounds.min.y);
         break;
       }
@@ -427,8 +430,10 @@ export class GameScene extends BaseScene {
       const tier = event.created.tier;
       const color = hexToNumber(this.artFor(tier).colors.base);
       this.fx.merge(event.x, event.y, color, tier, t('game.clack'), event.score);
+      this.ctx.audio.form(formOf(this.theme, tier).sound, event.combo);
     } else {
       this.fx.mega(event.x, event.y, t('game.mega'), event.score);
+      this.ctx.audio.mega();
     }
     if (!this.ctx.reducedMotion) {
       this.tweens.killTweensOf(this.scoreText);
@@ -449,6 +454,7 @@ export class GameScene extends BaseScene {
     this.pauseButton.setVisible(false);
     this.pauseButton.disableInteractive();
     this.ctx.pause.setRunActive(false);
+    this.ctx.audio.gameOver();
 
     const { ctx } = this;
     const stats = this.run.getStats();

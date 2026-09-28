@@ -104,6 +104,10 @@ export abstract class BaseScene extends Phaser.Scene implements ButtonHost {
     });
   }
 
+  playButtonSound(): void {
+    this.ctx.audio.ui();
+  }
+
   /** Кнопки экрана (для автотестов). */
   getButtons(): readonly Button[] {
     return this.buttons;
