@@ -80,7 +80,8 @@ export class ResultScene extends BaseScene {
       color: COLORS.title,
     }).setOrigin(0.5);
     this.keycap = new Keycap(this, art, { idle: !this.ctx.reducedMotion, random: Math.random });
-    this.keyScale = Math.min(1.6, 240 / art.width, 150 / art.height);
+    // Широкие клавиши (Пробел) показываем шире: легендарная форма не должна быть мелкой.
+    this.keyScale = Math.min(1.6, 340 / art.width, 150 / art.height);
     this.add.existing(this.keycap);
     this.keyName = this.createText(360, 0, formOf(theme, tier).name[lang], {
       fontSize: '40px',
