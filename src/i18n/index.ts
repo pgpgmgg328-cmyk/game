@@ -32,3 +32,13 @@ export function createTranslator(lang: Lang): Translate {
     );
   };
 }
+
+/**
+ * Число с разделителями разрядов: «12 345» по-русски и «12,345» по-английски.
+ * Свой форматтер, а не toLocaleString: в разных браузерах он даёт разные пробелы.
+ */
+export function formatNumber(value: number, lang: Lang): string {
+  const digits = String(Math.max(0, Math.round(value)));
+  const separator = lang === 'ru' ? '\u00a0' : ',';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
+}

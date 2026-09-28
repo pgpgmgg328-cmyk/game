@@ -1,5 +1,10 @@
 {
   "game.title": "Сквиши Клавиши: Мерж до Пробела",
+  "game.best": "Рекорд: {score}",
+  "game.next": "Далее",
+  "game.clack": "клац!",
+  "game.mega": "МЕГА-КЛАЦ!",
+  "game.overflow": "Банка переполнена!",
   "menu.play": "ИГРАТЬ",
   "menu.worlds": "Миры",
   "menu.album": "Альбом",

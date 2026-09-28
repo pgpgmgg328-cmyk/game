@@ -1,5 +1,10 @@
 {
   "game.title": "Squishy Keys: Merge to Spacebar",
+  "game.best": "Best: {score}",
+  "game.next": "Next",
+  "game.clack": "clack!",
+  "game.mega": "MEGA CLACK!",
+  "game.overflow": "The jar is full!",
   "menu.play": "PLAY",
   "menu.worlds": "Worlds",
   "menu.album": "Album",

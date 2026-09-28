@@ -1,5 +1,8 @@
-/** Действия игрока с клавиатуры (CLAUDE.md: ←/→ или A/D — двигать, Space/Enter — сбросить). */
-export type KeyAction = 'left' | 'right' | 'drop';
+/**
+ * Действия игрока с клавиатуры (CLAUDE.md: ←/→ или A/D — двигать, Space/Enter — сбросить).
+ * Esc и P ставят забег на паузу и снимают её.
+ */
+export type KeyAction = 'left' | 'right' | 'drop' | 'pause';
 
 export interface KeyInfo {
   code: string;
@@ -20,6 +23,8 @@ const ACTIONS: Readonly<Record<string, KeyAction>> = {
   Space: 'drop',
   Enter: 'drop',
   NumpadEnter: 'drop',
+  Escape: 'pause',
+  KeyP: 'pause',
 };
 
 /** Действие для нажатой клавиши или null. Сочетания с Ctrl, Alt и Cmd не трогаем: они системные. */

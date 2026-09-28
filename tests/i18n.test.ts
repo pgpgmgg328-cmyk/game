@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import en from '../src/i18n/en.json';
-import { createTranslator, resolveLang } from '../src/i18n';
+import { createTranslator, formatNumber, resolveLang } from '../src/i18n';
 import ru from '../src/i18n/ru.json';
 
 describe('словари', () => {
@@ -65,5 +65,17 @@ describe('createTranslator', () => {
 
   it('оставляет неизвестный параметр как есть', () => {
     expect(createTranslator('en')('settings.music', {})).toBe('Music: {state}');
+  });
+});
+
+describe('formatNumber', () => {
+  it('разделяет разряды по правилам языка', () => {
+    expect(formatNumber(0, 'ru')).toBe('0');
+    expect(formatNumber(999, 'en')).toBe('999');
+    expect(formatNumber(1234, 'en')).toBe('1,234');
+    expect(formatNumber(1234567, 'en')).toBe('1,234,567');
+    expect(formatNumber(12345, 'ru')).toBe('12\u00a0345');
+    expect(formatNumber(-5, 'ru')).toBe('0');
+    expect(formatNumber(10.6, 'en')).toBe('11');
   });
 });

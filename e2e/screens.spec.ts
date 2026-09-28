@@ -50,13 +50,13 @@ for (const size of SIZES) {
       const problems = watchConsole(page);
 
       for (const lang of ['ru', 'en']) {
-        await openGame(page, { lang });
+        await openGame(page, { lang, seed: '7' });
         await expectNoPageScroll(page);
         await expectButtonsFit(page);
         if (lang === 'ru' || size.allScreens) await screenshot(page, `menu-${lang}-${name}`);
       }
 
-      await openGame(page, { lang: 'ru' });
+      await openGame(page, { lang: 'ru', seed: '7' });
       await press(page, 'menu.play', size.mobile);
       await waitScene(page, 'Game');
       await expectNoPageScroll(page);

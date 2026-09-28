@@ -21,6 +21,8 @@ describe('actionForKey', () => {
     ['Space', 'drop'],
     ['Enter', 'drop'],
     ['NumpadEnter', 'drop'],
+    ['Escape', 'pause'],
+    ['KeyP', 'pause'],
   ])('%s → %s', (code, action) => {
     expect(actionForKey(key(code))).toBe(action);
   });
@@ -32,7 +34,6 @@ describe('actionForKey', () => {
 
   it('игнорирует остальные клавиши', () => {
     expect(actionForKey(key('KeyW'))).toBeNull();
-    expect(actionForKey(key('Escape'))).toBeNull();
     expect(actionForKey(key('Tab'))).toBeNull();
   });
 
