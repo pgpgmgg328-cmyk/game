@@ -54,8 +54,9 @@ export class PauseScene extends BaseScene {
         onClick: () => this.exitToMenu(),
       }),
     ];
+    // Space/Enter и повторный Esc/P продолжают забег.
     this.onKeyAction((action) => {
-      if (action === 'drop') this.resumeRun();
+      if (action === 'drop' || action === 'pause') this.resumeRun();
     });
     this.layoutScreen(this.screenHeight);
   }

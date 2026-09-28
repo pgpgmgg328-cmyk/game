@@ -681,10 +681,17 @@ export class GameScene extends BaseScene {
   debugStep(steps: number): void {
     this.run.stepMany(steps);
     this.renderKeys(1);
+    // Шаги прошли мгновенно: пружинки клавиш тоже сразу в покое, иначе кадр зависит от времени.
+    this.views.forEach((view) => view.settle());
   }
 
   /** Остановить физику, оставив отрисовку (для скриншотов). */
   debugFreeze(frozen: boolean): void {
     this.frozen = frozen;
+  }
+
+  /** Закончить забег сразу, как при переполнении (для скриншотов экрана результата). */
+  debugEndRun(): void {
+    this.endRun();
   }
 }

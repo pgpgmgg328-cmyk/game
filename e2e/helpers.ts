@@ -44,9 +44,13 @@ export async function useFakeSdk(page: Page): Promise<void> {
   );
 }
 
-export async function waitScene(page: Page, scene: string): Promise<void> {
+/**
+ * Ждёт экран. Без видеокарты кадров мало, а первые 120 кадров после старта Phaser ограничивает шаг
+ * времени 1/60 с, поэтому паузы по часам сцены (например, надпись перед результатом) тянутся дольше.
+ */
+export async function waitScene(page: Page, scene: string, timeout = 15_000): Promise<void> {
   await page.waitForFunction((name) => document.body.dataset.scene === name, scene, {
-    timeout: 15_000,
+    timeout,
   });
   // Два кадра, чтобы экран успел нарисоваться.
   await page.evaluate(
@@ -137,4 +141,54 @@ export async function expectButtonsFit(page: Page): Promise<void> {
 
 export async function screenshot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${SCREENS_DIR}${name}.png` });
+}
+
+export interface E2eRunState {
+  keys: { id: number; tier: number; x: number; y: number }[];
+  score: number;
+  over: boolean;
+  ending: boolean;
+  current: number;
+  upcoming: number[];
+  canDrop: boolean;
+  danger: boolean;
+  aimX: number;
+}
+
+/** Вызов хука window.__e2e[name](...args). */
+export async function e2eCall<T = unknown>(
+  page: Page,
+  name: string,
+  ...args: unknown[]
+): Promise<T> {
+  return page.evaluate(
+    ([hook, params]) =>
+      (window as unknown as { __e2e: Record<string, (...a: unknown[]) => unknown> }).__e2e[hook]!(
+        ...(params as unknown[]),
+      ),
+    [name, args] as const,
+  ) as Promise<T>;
+}
+
+export async function runState(page: Page): Promise<E2eRunState> {
+  const state = await e2eCall<E2eRunState | null>(page, 'run');
+  if (!state) throw new Error('Экран забега не открыт');
+  return state;
+}
+
+/** Ждёт, пока висящую клавишу можно сбросить (игровое время без видеокарты идёт медленнее). */
+export async function waitCanDrop(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      (window as unknown as { __e2e: { run(): { canDrop: boolean } | null } }).__e2e.run()?.canDrop,
+    undefined,
+    { timeout: 15_000 },
+  );
+}
+
+/** Нажать в точку банки (единицы физики) пальцем или мышью. */
+export async function tapJar(page: Page, x: number, y: number, touch = false): Promise<void> {
+  const point = await e2eCall<{ x: number; y: number }>(page, 'jarPoint', x, y);
+  if (touch) await page.touchscreen.tap(point.x, point.y);
+  else await page.mouse.click(point.x, point.y);
 }

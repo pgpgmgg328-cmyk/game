@@ -13,19 +13,21 @@ import { titleStyle } from './titleStyle';
 /** Сколько «тикает» счёт до итогового числа. */
 const COUNT_MS = 1200;
 
+const EMPTY_SUMMARY: RunSummary = {
+  score: 0,
+  best: 0,
+  newRecord: false,
+  bestTier: 1,
+  world: DEFAULT_THEME_ID,
+};
+
 /**
  * Экран результата: счёт со счётчиком-тикалкой, «Новый рекорд!», самая большая клавиша забега,
  * «Ещё раз» и «В меню» (диздок, раздел 9). Монеты и открытые формы добавятся в M2,
  * «▶ ×2 монеты» — в M3.
  */
 export class ResultScene extends BaseScene {
-  private summary: RunSummary = {
-    score: 0,
-    best: 0,
-    newRecord: false,
-    bestTier: 1,
-    world: DEFAULT_THEME_ID,
-  };
+  private summary: RunSummary = EMPTY_SUMMARY;
   private title!: Phaser.GameObjects.Text;
   private scoreLabel!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -48,7 +50,7 @@ export class ResultScene extends BaseScene {
 
   create(data?: Partial<RunSummary>): void {
     this.setupScreen();
-    this.summary = { ...this.summary, ...data };
+    this.summary = { ...EMPTY_SUMMARY, ...data };
     this.shown = 0;
     this.counting = 0;
     this.revealed = false;

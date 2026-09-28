@@ -33,6 +33,12 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     paused: () => ctx.pause.isPaused,
     gameplayActive: () => ctx.pause.isGameplayActive,
     audio: () => ctx.audio.state,
+    /** Статусы сцен Phaser (5 — работает, 6 — на паузе). */
+    scenes: () =>
+      game.scene
+        .getScenes(false)
+        .map((scene) => `${scene.sys.settings.key}:${scene.sys.settings.status}`)
+        .join(' '),
     buttons: (): E2eButton[] => collectButtons(game, ctx),
     /** Состояние забега или null, если экран забега не открыт. */
     run: () => gameScene()?.debugState() ?? null,
@@ -47,6 +53,10 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     setCurrent: (tier: number) => gameScene()?.debugSetCurrent(tier),
     step: (steps: number) => gameScene()?.debugStep(steps),
     freeze: (frozen: boolean) => gameScene()?.debugFreeze(frozen),
+    endRun: () => gameScene()?.debugEndRun(),
+    /** Снимок забега из локального кэша (как его увидит игра после перезагрузки). */
+    savedRun: () => ctx.platform.loadRunSnapshot(),
+    stats: () => (ctx.saveLoaded ? ctx.save.data.stats : null),
   };
 }
 

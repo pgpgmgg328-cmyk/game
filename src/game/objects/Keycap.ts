@@ -67,6 +67,12 @@ export class Keycap extends Phaser.GameObjects.Container {
     this.squashSpeed += Math.max(-1, Math.min(1, amount)) * 7;
   }
 
+  /** Сразу успокоить пружинку (для воспроизводимых скриншотов). */
+  settle(): void {
+    this.squashValue = 0;
+    this.squashSpeed = 0;
+  }
+
   /** Показать особое лицо (например, «сплющилось») на время. */
   showFace(frame: FaceFrame, ms: number): void {
     this.heldFrame = frame;
