@@ -106,6 +106,16 @@ export class Particles {
     this.popup(x, y, `${label}\n+${score}`, 56);
   }
 
+  /** Праздничный салют без надписи (например, «Новый рекорд!»). */
+  celebrate(x: number, y: number): void {
+    [0xffd65c, 0xff9aa2, 0x8fd3ff].forEach((color) => {
+      this.stars.setParticleTint(color);
+      this.stars.explode(this.reducedMotion ? 5 : 10, x, y);
+    });
+    this.sparkles.setParticleTint(0xffffff);
+    this.sparkles.explode(10, x, y);
+  }
+
   /** Тап-сквиш: пара искорок. */
   squish(x: number, y: number): void {
     this.sparkles.setParticleTint(0xffffff);

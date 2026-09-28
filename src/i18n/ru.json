@@ -26,7 +26,10 @@
   "pause.title": "Пауза",
   "pause.continue": "Продолжить",
   "pause.menu": "В меню",
-  "result.title": "Результат",
+  "result.title": "Отличная игра!",
+  "result.score": "Очки",
+  "result.newRecord": "Новый рекорд!",
+  "result.bestKey": "Самая большая клавиша",
   "result.again": "Ещё раз",
   "result.menu": "В меню"
 }

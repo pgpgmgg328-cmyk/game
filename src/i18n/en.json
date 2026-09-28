@@ -26,7 +26,10 @@
   "pause.title": "Paused",
   "pause.continue": "Continue",
   "pause.menu": "Menu",
-  "result.title": "Result",
+  "result.title": "Great game!",
+  "result.score": "Score",
+  "result.newRecord": "New record!",
+  "result.bestKey": "Biggest key",
   "result.again": "Play again",
   "result.menu": "Menu"
 }
