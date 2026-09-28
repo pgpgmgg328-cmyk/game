@@ -12,6 +12,9 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     ...devices['Desktop Chrome'],
+    // Если браузер Playwright не скачивается, можно взять уже установленный:
+    // PW_CHANNEL=msedge (Edge есть в каждой Windows) или PW_CHANNEL=chrome.
+    ...(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}),
     baseURL: 'http://localhost:4173',
     // Без видеокарты Chromium рисует WebGL программно и иначе ругается в консоль об этом.
     launchOptions: { args: ['--enable-unsafe-swiftshader'] },

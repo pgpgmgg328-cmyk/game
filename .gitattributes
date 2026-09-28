@@ -1,0 +1,6 @@
+# Переводы строк всегда LF, в том числе на Windows: иначе `prettier --check` ругается на каждый файл.
+* text=auto eol=lf
+
+*.png binary
+*.woff2 binary
+*.zip binary
