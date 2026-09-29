@@ -19,7 +19,8 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "e2e": "vite build && playwright test",
     "moderation": "vite build && node scripts/moderation-check.ts",
-    "zip": "vite build && node scripts/moderation-check.ts && node scripts/zip.ts"
+    "zip": "vite build && node scripts/moderation-check.ts && node scripts/zip.ts",
+    "offline": "vite build && node scripts/standalone.ts"
   },
   "dependencies": {
     "phaser": "3.90.0"
