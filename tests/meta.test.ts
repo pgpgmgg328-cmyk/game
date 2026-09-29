@@ -45,13 +45,14 @@ describe('апгрейды', () => {
   });
 
   it('покупка списывает монеты и поднимает уровень, без монет — нельзя', () => {
+    const start = UPGRADES.jar.basePrice + 100;
     const draft = save((d) => {
-      d.coins = 1000;
+      d.coins = start;
     });
     expect(canBuyUpgrade(draft, 'jar')).toBe(true);
     expect(buyUpgrade(draft, 'jar')).toBe(true);
     expect(draft.upgrades.jar).toBe(1);
-    expect(draft.coins).toBe(1000 - UPGRADES.jar.basePrice);
+    expect(draft.coins).toBe(100);
     expect(buyUpgrade(draft, 'jar')).toBe(false);
     expect(draft.upgrades.jar).toBe(1);
     expect(canBuyUpgrade(draft, 'jar')).toBe(false);

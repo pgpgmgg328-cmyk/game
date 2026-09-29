@@ -229,20 +229,20 @@ test.describe('мета в забеге', () => {
   }) => {
     const problems = watchConsole(page);
     await openGame(page, { lang: 'ru', seed: '5' });
-    await patchSave(page, { ...VETERAN_SAVE, coins: 1000 });
+    await patchSave(page, { ...VETERAN_SAVE, coins: 2000 });
     await press(page, 'menu.upgrades', true);
     await waitScene(page, 'Upgrades');
     await expectButtonsFit(page);
-    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('150');
+    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('450');
     await press(page, 'upgrades.buy.shake', true);
     await page.waitForFunction(
       () =>
         (window as unknown as { __e2e: { save(): { upgrades: { shake: number } } } }).__e2e.save()
           .upgrades.shake === 1,
     );
-    expect((await saveData(page)).coins).toBe(850);
+    expect((await saveData(page)).coins).toBe(1550);
     // Цена следующего уровня выросла в 1,6 раза.
-    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('240');
+    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('720');
 
     // «+1 к предпросмотру» — один уровень: после покупки кнопка показывает «МАКС».
     await press(page, 'upgrades.buy.preview', true);
@@ -251,7 +251,7 @@ test.describe('мета в забеге', () => {
         (window as unknown as { __e2e: { save(): { upgrades: { preview: number } } } }).__e2e.save()
           .upgrades.preview === 1,
     );
-    expect((await saveData(page)).coins).toBe(450);
+    expect((await saveData(page)).coins).toBe(350);
     await page.reload();
     await waitScene(page, 'Menu');
     await press(page, 'menu.upgrades', true);

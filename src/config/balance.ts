@@ -128,20 +128,24 @@ export const GOLDEN = {
 } as const;
 
 /** Апгрейды «+1» (диздок, раздел 6): цена растёт ×1,6 за уровень. */
+/**
+ * Стартовые цены подобраны ботом (docs/PROGRESS.md, «Баланс M2»): забег даёт ~1–3 тысячи монет,
+ * первый апгрейд покупается после первого забега, всё вместе (~27 800) — за 1,5–3 часа игры.
+ */
 export const UPGRADES = {
   priceGrowth: 1.6,
   /** «+1 Встряска»: заряд за уровень, не больше 3 за забег. */
-  shake: { maxLevel: 3, basePrice: 150 },
+  shake: { maxLevel: 3, basePrice: 450 },
   /** «+1 Удаление»: заряд за уровень, не больше 3 за забег. */
-  remove: { maxLevel: 3, basePrice: 200 },
+  remove: { maxLevel: 3, basePrice: 600 },
   /** «+1 к предпросмотру»: видно две следующие клавиши. */
-  preview: { maxLevel: 1, basePrice: 400 },
+  preview: { maxLevel: 1, basePrice: 1200 },
   /** «+1 к силе сквиша»: импульс тапа сильнее на долю за уровень. */
-  squish: { maxLevel: 3, basePrice: 100, powerPerLevel: 0.2 },
+  squish: { maxLevel: 3, basePrice: 300, powerPerLevel: 0.2 },
   /** «+1% золотых»: до +5 %. */
-  golden: { maxLevel: 5, basePrice: 250 },
+  golden: { maxLevel: 5, basePrice: 750 },
   /** «Банка шире»: +2 % ширины за уровень. */
-  jar: { maxLevel: 3, basePrice: 500, widthPerLevel: 0.02 },
+  jar: { maxLevel: 3, basePrice: 1500, widthPerLevel: 0.02 },
 } as const;
 
 /** «Встряска»: скорости, которые получают клавиши (единицы за шаг физики). */
