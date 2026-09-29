@@ -195,9 +195,9 @@ export class MenuScene extends BaseScene {
         score: snapshot.score,
         completed: false,
         merges: snapshot.merges,
-        goldenMerges: 0,
-        megas: 0,
-        coins: 0,
+        goldenMerges: snapshot.goldenMerges,
+        megas: snapshot.megas,
+        coins: snapshot.coins,
       });
     });
     this.setMenuEnabled(true);

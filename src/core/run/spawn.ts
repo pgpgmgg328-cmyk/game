@@ -45,62 +45,84 @@ export function pickTier(weights: readonly number[], random: number): number {
   return 1;
 }
 
-/**
- * Очередь клавиш: текущая висит над банкой, следующие видны в превью
- * (одна по умолчанию, вторая — апгрейдом в M2).
- */
+/** Клавиша в очереди: тир и золотая ли она (диздок, раздел 3). */
+export interface QueueItem {
+  tier: number;
+  golden: boolean;
+}
+
+export interface QueueOptions {
+  /** Сколько следующих клавиш видно: одна, со вторым апгрейдом — две. */
+  preview: number;
+  /** Шанс, что выпавшая клавиша золотая. */
+  goldenChance: number;
+  /** Первые тиры по порядку (обучение), дальше — случайные. Они не бывают золотыми. */
+  opening?: readonly number[];
+}
+
+/** Очередь клавиш: текущая висит над банкой, следующие видны в превью «Далее». */
 export class KeyQueue {
   private readonly rng: Rng;
   private readonly schedule: SpawnSchedule;
-  private currentTier: number;
-  private readonly next: number[];
+  private readonly goldenChance: number;
+  private readonly opening: number[];
+  private currentItem: QueueItem;
+  private readonly next: QueueItem[];
 
-  constructor(rng: Rng, schedule: SpawnSchedule, preview: number, restore?: KeyQueueState) {
+  constructor(rng: Rng, schedule: SpawnSchedule, options: QueueOptions, restore?: KeyQueueState) {
     this.rng = rng;
     this.schedule = schedule;
+    this.goldenChance = options.goldenChance;
+    this.opening = restore ? [] : [...(options.opening ?? [])];
     if (restore) {
-      this.currentTier = restore.current;
-      this.next = restore.upcoming.slice(0, preview);
+      this.currentItem = { ...restore.current };
+      this.next = restore.upcoming.slice(0, options.preview).map((item) => ({ ...item }));
     } else {
-      this.currentTier = this.pick(0);
+      this.currentItem = this.pick(0);
       this.next = [];
     }
-    while (this.next.length < preview) this.next.push(this.pick(0));
+    while (this.next.length < options.preview) this.next.push(this.pick(0));
   }
 
   /** Клавиша, которая сейчас висит над банкой. */
-  get current(): number {
-    return this.currentTier;
+  get current(): QueueItem {
+    return this.currentItem;
   }
 
   /** Следующие клавиши по порядку. */
-  get upcoming(): readonly number[] {
+  get upcoming(): readonly QueueItem[] {
     return this.next;
   }
 
   get state(): KeyQueueState {
-    return { current: this.currentTier, upcoming: [...this.next] };
+    return {
+      current: { ...this.currentItem },
+      upcoming: this.next.map((item) => ({ ...item })),
+    };
   }
 
-  /** Заменить висящую клавишу (обучение в M2, автотесты). Очередь не меняется. */
-  replaceCurrent(tier: number): void {
-    this.currentTier = tier;
+  /** Заменить висящую клавишу (обучение, автотесты). Очередь не меняется. */
+  replaceCurrent(tier: number, golden = false): void {
+    this.currentItem = { tier, golden };
   }
 
   /** Текущая клавиша сброшена: следующая встаёт на её место, в конец очереди добавляется новая. */
-  advance(elapsedSec: number): number {
+  advance(elapsedSec: number): QueueItem {
     const next = this.next.shift();
-    this.currentTier = next ?? this.pick(elapsedSec);
+    this.currentItem = next ?? this.pick(elapsedSec);
     this.next.push(this.pick(elapsedSec));
-    return this.currentTier;
+    return this.currentItem;
   }
 
-  private pick(elapsedSec: number): number {
-    return pickTier(spawnWeightsAt(this.schedule, elapsedSec), this.rng.next());
+  private pick(elapsedSec: number): QueueItem {
+    const scripted = this.opening.shift();
+    if (scripted !== undefined) return { tier: scripted, golden: false };
+    const tier = pickTier(spawnWeightsAt(this.schedule, elapsedSec), this.rng.next());
+    return { tier, golden: this.rng.next() < this.goldenChance };
   }
 }
 
 export interface KeyQueueState {
-  current: number;
-  upcoming: number[];
+  current: QueueItem;
+  upcoming: QueueItem[];
 }

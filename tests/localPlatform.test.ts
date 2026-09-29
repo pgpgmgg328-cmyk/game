@@ -68,7 +68,7 @@ describe('LocalPlatform', () => {
     const platform = await platformWith(storage);
     expect(platform.loadRunSnapshot()).toBeNull();
     const snapshot = {
-      v: 1 as const,
+      v: 2 as const,
       world: 'classic',
       seed: 1,
       rng: 2,
@@ -76,10 +76,16 @@ describe('LocalPlatform', () => {
       elapsedMs: 5000,
       drops: 4,
       merges: 1,
+      goldenMerges: 0,
+      megas: 0,
+      coins: 2,
       bestTier: 2,
-      current: 1,
-      upcoming: [2],
+      current: { tier: 1, golden: false },
+      upcoming: [{ tier: 2, golden: false }],
       aimX: 300,
+      modifiers: { jarWidth: 600, preview: 1, squishPower: 1, goldenChance: 0.02 },
+      shakes: 0,
+      removes: 0,
       keys: [],
     };
     platform.saveRunSnapshot(snapshot);

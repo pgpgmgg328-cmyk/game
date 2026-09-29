@@ -335,7 +335,7 @@ export class GameScene extends BaseScene {
 
   private updatePreview(): void {
     this.preview?.destroy();
-    const tier = this.run.upcoming[0];
+    const tier = this.run.upcoming[0]?.tier;
     if (tier === undefined) {
       this.preview = null;
       return;
@@ -479,9 +479,9 @@ export class GameScene extends BaseScene {
         score: stats.score,
         completed: true,
         merges: stats.merges,
-        goldenMerges: 0,
-        megas: 0,
-        coins: 0,
+        goldenMerges: stats.goldenMerges,
+        megas: stats.megas,
+        coins: stats.coins,
       });
     });
     const summary: RunSummary = {
@@ -535,9 +535,9 @@ export class GameScene extends BaseScene {
         score: stats.score,
         completed: false,
         merges: stats.merges,
-        goldenMerges: 0,
-        megas: 0,
-        coins: 0,
+        goldenMerges: stats.goldenMerges,
+        megas: stats.megas,
+        coins: stats.coins,
       });
     });
   }
@@ -668,7 +668,7 @@ export class GameScene extends BaseScene {
       over: this.run.over,
       ending: this.ending,
       current: this.run.currentTier,
-      upcoming: [...this.run.upcoming],
+      upcoming: this.run.upcoming.map((item) => item.tier),
       canDrop: this.run.canDrop,
       danger: this.run.dangerWarning,
       aimX: this.run.aimX,

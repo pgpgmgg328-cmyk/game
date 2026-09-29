@@ -60,25 +60,56 @@ describe('спавн', () => {
     counts.forEach((count, i) => expect(count / total).toBeCloseTo(SPAWN.weights[i]! / 100, 1));
   });
 
+  const plain = { preview: 1, goldenChance: 0 };
+
   it('очередь: текущая клавиша, превью, продолжение из состояния', () => {
     const rng = new Rng(5);
-    const queue = new KeyQueue(rng, SPAWN, 1);
+    const queue = new KeyQueue(rng, SPAWN, plain);
     expect(queue.upcoming).toHaveLength(1);
     const next = queue.upcoming[0];
     expect(queue.advance(0)).toBe(next);
 
-    const copy = new KeyQueue(new Rng(rng.state), SPAWN, 1, queue.state);
-    expect(copy.current).toBe(queue.current);
-    expect(copy.advance(10)).toBe(queue.advance(10));
+    const copy = new KeyQueue(new Rng(rng.state), SPAWN, plain, queue.state);
+    expect(copy.current).toEqual(queue.current);
+    expect(copy.advance(10)).toEqual(queue.advance(10));
     expect(copy.upcoming).toEqual(queue.upcoming);
 
-    const wider = new KeyQueue(new Rng(1), SPAWN, 2, { current: 3, upcoming: [2] });
-    expect(wider.current).toBe(3);
-    expect(wider.upcoming[0]).toBe(2);
+    const wider = new KeyQueue(
+      new Rng(1),
+      SPAWN,
+      { preview: 2, goldenChance: 0 },
+      { current: { tier: 3, golden: true }, upcoming: [{ tier: 2, golden: false }] },
+    );
+    expect(wider.current).toEqual({ tier: 3, golden: true });
+    expect(wider.upcoming[0]).toEqual({ tier: 2, golden: false });
     expect(wider.upcoming).toHaveLength(2);
     for (let i = 0; i < 100; i += 1) {
-      expect(queue.advance(i * 5)).toBeLessThanOrEqual(5);
+      const item = queue.advance(i * 5);
+      expect(item.tier).toBeLessThanOrEqual(5);
+      expect(item.golden).toBe(false);
     }
+  });
+
+  it('золотые клавиши выпадают с заданным шансом', () => {
+    const queue = new KeyQueue(new Rng(9), SPAWN, { preview: 1, goldenChance: 0.2 });
+    let golden = 0;
+    const total = 20_000;
+    for (let i = 0; i < total; i += 1) if (queue.advance(0).golden) golden += 1;
+    expect(golden / total).toBeCloseTo(0.2, 1);
+  });
+
+  it('обучение: первые клавиши по порядку и не золотые, дальше случайные', () => {
+    const queue = new KeyQueue(new Rng(2), SPAWN, {
+      preview: 1,
+      goldenChance: 1,
+      opening: [1, 1, 2],
+    });
+    expect(queue.current).toEqual({ tier: 1, golden: false });
+    expect(queue.upcoming).toEqual([{ tier: 1, golden: false }]);
+    expect(queue.advance(0)).toEqual({ tier: 1, golden: false });
+    expect(queue.advance(0)).toEqual({ tier: 2, golden: false });
+    // Опция закончилась: дальше обычные клавиши (здесь шанс золота 100 %).
+    expect(queue.advance(0).golden).toBe(true);
   });
 });
 
@@ -210,7 +241,7 @@ describe('комбо и перезарядка', () => {
 describe('снимок забега', () => {
   const limits = { maxTier: 11, maxKeys: 150 };
   const valid: RunSnapshot = {
-    v: 1,
+    v: 2,
     world: 'classic',
     seed: 12345,
     rng: 4000000000,
@@ -218,11 +249,17 @@ describe('снимок забега', () => {
     elapsedMs: 65000,
     drops: 30,
     merges: 12,
+    goldenMerges: 1,
+    megas: 0,
+    coins: 57,
     bestTier: 6,
-    current: 2,
-    upcoming: [1],
+    current: { tier: 2, golden: false },
+    upcoming: [{ tier: 1, golden: true }],
     aimX: 280.5,
-    keys: [{ tier: 3, x: 100.25, y: 700, angle: 0.1, vx: 0, vy: -0.5, spin: 0 }],
+    modifiers: { jarWidth: 612, preview: 1, squishPower: 1.2, goldenChance: 0.03 },
+    shakes: 1,
+    removes: 0,
+    keys: [{ tier: 3, golden: true, x: 100.25, y: 700, angle: 0.1, vx: 0, vy: -0.5, spin: 0 }],
   };
 
   it('правильный снимок читается как есть', () => {
@@ -234,7 +271,9 @@ describe('снимок забега', () => {
     expect(offerableSnapshot(valid, maxTierOf, 150)).toEqual(valid);
     expect(offerableSnapshot({ ...valid, world: 'space' }, maxTierOf, 150)).toBeNull();
     expect(offerableSnapshot({ ...valid, drops: 0 }, maxTierOf, 150)).toBeNull();
-    expect(offerableSnapshot({ ...valid, current: 11 }, () => 5, 150)).toBeNull();
+    expect(
+      offerableSnapshot({ ...valid, current: { tier: 11, golden: false } }, () => 5, 150),
+    ).toBeNull();
     expect(offerableSnapshot('мусор', maxTierOf, 150)).toBeNull();
   });
 
@@ -243,13 +282,21 @@ describe('снимок забега', () => {
       null,
       'снимок',
       [],
-      { ...valid, v: 2 },
+      { ...valid, v: 1 },
       { ...valid, world: '' },
       { ...valid, seed: -1 },
       { ...valid, score: 1.5 },
       { ...valid, current: 12 },
+      { ...valid, current: { tier: 12, golden: false } },
+      { ...valid, current: { tier: 2 } },
+      { ...valid, coins: -1 },
+      { ...valid, shakes: 'много' },
+      { ...valid, modifiers: { ...valid.modifiers, jarWidth: 5 } },
+      { ...valid, modifiers: { ...valid.modifiers, goldenChance: 2 } },
+      { ...valid, modifiers: null },
       { ...valid, bestTier: 0 },
-      { ...valid, upcoming: [1, 'x'] },
+      { ...valid, upcoming: [{ tier: 1, golden: false }, 'x'] },
+      { ...valid, keys: [{ ...valid.keys[0], golden: 'да' }] },
       { ...valid, aimX: Number.NaN },
       { ...valid, keys: {} },
       { ...valid, keys: [{ ...valid.keys[0], tier: 0 }] },

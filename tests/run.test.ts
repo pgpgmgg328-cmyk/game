@@ -1,16 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { DANGER, DROP, JAR, PHYSICS, SCORE, SQUISH } from '../src/config/balance';
-import { Run, type RunEvent } from '../src/game/run/Run';
+import { COINS, DANGER, DROP, JAR, PHYSICS, RUN, SCORE, SQUISH } from '../src/config/balance';
+import { runModifiers, type RunModifiers } from '../src/core/meta/upgrades';
+import { readRunSnapshot } from '../src/core/run/snapshot';
+import { BASE_MODIFIERS, Run, type RunEvent, type RunOptions } from '../src/game/run/Run';
 import { WORLD1_CLASSIC } from '../src/themes/world1-classic';
 import { matter } from './matter';
 
 const STEPS_PER_SECOND = Math.round(1000 / PHYSICS.stepMs);
+const COOLDOWN_STEPS = Math.ceil(DROP.cooldownMs / PHYSICS.stepMs) + 1;
 
-function createRun(seed = 1): { run: Run; events: RunEvent[] } {
-  const run = new Run(matter, WORLD1_CLASSIC, { seed });
+function createRun(
+  seed = 1,
+  options: Omit<RunOptions, 'seed'> = {},
+): { run: Run; events: RunEvent[] } {
+  const run = new Run(matter, WORLD1_CLASSIC, { seed, ...options });
   const events: RunEvent[] = [];
   run.on((event) => events.push(event));
   return { run, events };
+}
+
+function withModifiers(change: Partial<RunModifiers>): RunModifiers {
+  return { ...BASE_MODIFIERS, ...change };
 }
 
 function tiers(run: Run): number[] {
@@ -199,5 +209,182 @@ describe('забег на настоящей физике', () => {
     copy.drop();
     expect(copy.currentTier).toBe(run.currentTier);
     expect(copy.upcoming).toEqual(run.upcoming);
+  });
+});
+
+describe('забег: золото, апгрейды и инструменты', () => {
+  it('слияние с золотой клавишей: результат золотой, монеты ×3, счётчик золотых слияний', () => {
+    const { run, events } = createRun();
+    run.placeKey(3, 200, JAR.height - 40, true);
+    run.placeKey(3, 272, JAR.height - 40);
+    run.stepMany(1);
+    const merge = ofType(events, 'merge')[0]!;
+    expect(merge.golden).toBe(true);
+    expect(merge.created?.golden).toBe(true);
+    expect(merge.coins).toBe(4 * COINS.goldenMultiplier);
+    expect(run.getStats()).toMatchObject({ merges: 1, goldenMerges: 1, coins: 12 });
+  });
+
+  it('обычное слияние даёт монеты по номеру тира, мега-клац — 100 и считается', () => {
+    const { run, events } = createRun();
+    run.placeKey(1, 150, JAR.height - 25);
+    run.placeKey(1, 198, JAR.height - 25);
+    run.placeKey(11, 150, JAR.height - 200);
+    run.placeKey(11, 448, JAR.height - 200);
+    run.stepMany(1);
+    const merges = ofType(events, 'merge');
+    expect(merges.map((merge) => merge.coins).sort((a, b) => a - b)).toEqual([2, COINS.mega]);
+    expect(merges.every((merge) => !merge.golden && !merge.created?.golden)).toBe(true);
+    expect(run.getStats()).toMatchObject({
+      merges: 2,
+      megas: 1,
+      goldenMerges: 0,
+      coins: 2 + COINS.mega,
+    });
+  });
+
+  it('золотая висящая клавиша падает золотой', () => {
+    const { run, events } = createRun();
+    run.setCurrentTier(2, true);
+    expect(run.current).toEqual({ tier: 2, golden: true });
+    expect(run.drop()).toBe(true);
+    expect(ofType(events, 'drop')[0]!.key.golden).toBe(true);
+  });
+
+  it('«Встряска» подбрасывает все клавиши и тратит заряды', () => {
+    const { run, events } = createRun(3, { modifiers: withModifiers({ shakes: 2 }) });
+    run.placeKey(3, 150, JAR.height - 40);
+    run.placeKey(5, 400, JAR.height - 50);
+    run.stepMany(STEPS_PER_SECOND);
+    expect(run.charges).toEqual({ shakes: 2, removes: 0 });
+
+    expect(run.shake()).toBe(true);
+    for (const key of run.keys) expect(key.body.velocity.y).toBeLessThan(-1);
+    expect(run.charges.shakes).toBe(1);
+    expect(run.shake()).toBe(true);
+    expect(run.shake()).toBe(false);
+    expect(run.charges.shakes).toBe(0);
+    expect(ofType(events, 'shake')).toHaveLength(2);
+
+    // Без апгрейда зарядов нет.
+    expect(createRun().run.shake()).toBe(false);
+  });
+
+  it('«Удаление» убирает клавишу из банки, пока есть заряды', () => {
+    const { run, events } = createRun(3, { modifiers: withModifiers({ removes: 1 }) });
+    const a = run.placeKey(2, 150, JAR.height - 30);
+    const b = run.placeKey(4, 400, JAR.height - 45);
+    expect(run.removeKey(a)).toBe(true);
+    expect(a.removed).toBe(true);
+    expect(run.keyCount).toBe(1);
+    expect(run.keyAt(150, JAR.height - 30)).toBeNull();
+    expect(run.removeKey(a)).toBe(false);
+    expect(run.removeKey(b)).toBe(false);
+    expect(run.keyCount).toBe(1);
+    expect(run.charges.removes).toBe(0);
+    expect(ofType(events, 'remove').map((event) => event.key)).toEqual([a]);
+  });
+
+  it('«Банка шире»: стенки и прицел по новой ширине', () => {
+    const modifiers = runModifiers({
+      shake: 0,
+      remove: 0,
+      preview: 0,
+      squish: 0,
+      golden: 0,
+      jar: 3,
+    });
+    const { run } = createRun(5, { modifiers });
+    expect(run.jar.width).toBe(Math.round(JAR.width * 1.06));
+    run.setCurrentTier(5);
+    run.setAim(10_000);
+    expect(run.aimX).toBe(run.jar.width - run.sizeOf(5).width / 2);
+
+    const key = run.placeKey(1, run.jar.width - 30, JAR.height - 25);
+    run.stepMany(STEPS_PER_SECOND);
+    // Клавиша лежит в добавленной полосе и не проходит сквозь правую стенку.
+    expect(key.body.bounds.max.x).toBeGreaterThan(JAR.width);
+    expect(key.body.bounds.max.x).toBeLessThan(run.jar.width + 2);
+  });
+
+  it('«+1 к силе сквиша» подбрасывает клавишу сильнее', () => {
+    const lift = (squishPower: number): number => {
+      const { run } = createRun(1, { modifiers: withModifiers({ squishPower }) });
+      const key = run.placeKey(3, 300, JAR.height - 40);
+      run.stepMany(STEPS_PER_SECOND);
+      expect(run.squish(key, 300)).toBe(true);
+      return -key.body.velocity.y;
+    };
+    expect(lift(1.6) / lift(1)).toBeCloseTo(1.6, 1);
+  });
+
+  it('второе «Далее»: видно две следующие клавиши', () => {
+    const { run } = createRun(4, { modifiers: withModifiers({ preview: 2 }) });
+    expect(run.upcoming).toHaveLength(2);
+    const [first, second] = run.upcoming.map((item) => ({ ...item }));
+    expect(run.drop()).toBe(true);
+    expect(run.current).toEqual(first);
+    expect(run.upcoming[0]).toEqual(second);
+    expect(run.upcoming).toHaveLength(2);
+  });
+
+  it('обучение: первые клавиши идут по сценарию и не бывают золотыми', () => {
+    const { run } = createRun(11, {
+      opening: [1, 1, 2],
+      modifiers: withModifiers({ goldenChance: 1 }),
+    });
+    expect(run.current).toEqual({ tier: 1, golden: false });
+    expect(run.upcoming).toEqual([{ tier: 1, golden: false }]);
+    run.drop();
+    run.stepMany(COOLDOWN_STEPS);
+    expect(run.current).toEqual({ tier: 1, golden: false });
+    expect(run.upcoming).toEqual([{ tier: 2, golden: false }]);
+    run.drop();
+    run.stepMany(COOLDOWN_STEPS);
+    expect(run.current).toEqual({ tier: 2, golden: false });
+    // Дальше обычная очередь: при шансе 1 все клавиши золотые.
+    expect(run.upcoming[0]!.golden).toBe(true);
+  });
+
+  it('снимок хранит золото, заряды и условия апгрейдов; снимок важнее текущих апгрейдов', () => {
+    const modifiers = runModifiers({
+      shake: 2,
+      remove: 3,
+      preview: 1,
+      squish: 2,
+      golden: 5,
+      jar: 2,
+    });
+    const { run } = createRun(21, { modifiers });
+    run.placeKey(4, 120, JAR.height - 45, true);
+    run.placeKey(2, 400, JAR.height - 30);
+    const victim = run.placeKey(1, 300, JAR.height - 25);
+    run.stepMany(30);
+    expect(run.shake()).toBe(true);
+    expect(run.removeKey(victim)).toBe(true);
+    run.stepMany(30);
+
+    const snapshot = run.snapshot();
+    expect(snapshot.modifiers).toEqual({
+      jarWidth: modifiers.jarWidth,
+      preview: 2,
+      squishPower: modifiers.squishPower,
+      goldenChance: modifiers.goldenChance,
+    });
+    expect([snapshot.shakes, snapshot.removes]).toEqual([1, 2]);
+    expect(snapshot.keys.map((key) => key.golden)).toEqual([true, false]);
+    expect(snapshot.upcoming).toHaveLength(2);
+
+    // Снимок проходит проверку при чтении из хранилища.
+    const stored: unknown = JSON.parse(JSON.stringify(snapshot));
+    expect(readRunSnapshot(stored, { maxTier: 11, maxKeys: RUN.maxSnapshotKeys })).toEqual(
+      snapshot,
+    );
+
+    const copy = new Run(matter, WORLD1_CLASSIC, { snapshot, modifiers: BASE_MODIFIERS });
+    expect(copy.snapshot()).toEqual(snapshot);
+    expect(copy.jar.width).toBe(modifiers.jarWidth);
+    expect(copy.charges).toEqual({ shakes: 1, removes: 2 });
+    expect([...copy.keys].map((key) => key.golden)).toEqual([true, false]);
   });
 });

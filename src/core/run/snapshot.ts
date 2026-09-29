@@ -1,17 +1,27 @@
 import { isJsonObject } from '../save/schema';
+import type { QueueItem } from './spawn';
 
 /** Версия формата снимка. При изменении формата старые снимки просто не предлагаются. */
-export const RUN_SNAPSHOT_VERSION = 1;
+export const RUN_SNAPSHOT_VERSION = 2;
 
-/** Клавиша в банке: тир, положение, поворот и скорости. */
+/** Клавиша в банке: тир, золотая ли, положение, поворот и скорости. */
 export interface KeySnapshot {
   tier: number;
+  golden: boolean;
   x: number;
   y: number;
   angle: number;
   vx: number;
   vy: number;
   spin: number;
+}
+
+/** Что апгрейды дали этому забегу: после перезагрузки забег продолжится с теми же условиями. */
+export interface SnapshotModifiers {
+  jarWidth: number;
+  preview: number;
+  squishPower: number;
+  goldenChance: number;
 }
 
 /**
@@ -31,14 +41,22 @@ export interface RunSnapshot {
   elapsedMs: number;
   drops: number;
   merges: number;
+  goldenMerges: number;
+  megas: number;
+  /** Монеты, заработанные в этом забеге. */
+  coins: number;
   /** Самая большая форма, собранная в этом забеге. */
   bestTier: number;
   /** Клавиша над банкой. */
-  current: number;
+  current: QueueItem;
   /** Следующие клавиши (превью). */
-  upcoming: number[];
+  upcoming: QueueItem[];
   /** Прицел: x висящей клавиши. */
   aimX: number;
+  modifiers: SnapshotModifiers;
+  /** Оставшиеся заряды «Встряски» и «Удаления». */
+  shakes: number;
+  removes: number;
   keys: KeySnapshot[];
 }
 
@@ -66,16 +84,33 @@ function isTier(value: unknown, maxTier: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= maxTier;
 }
 
+function readItem(raw: unknown, maxTier: number): QueueItem | null {
+  if (!isJsonObject(raw) || !isTier(raw.tier, maxTier) || typeof raw.golden !== 'boolean') {
+    return null;
+  }
+  return { tier: raw.tier, golden: raw.golden };
+}
+
 function readKey(raw: unknown, maxTier: number): KeySnapshot | null {
-  if (!isJsonObject(raw)) return null;
-  const { tier, x, y, angle, vx, vy, spin } = raw;
-  if (!isTier(tier, maxTier)) return null;
+  const item = readItem(raw, maxTier);
+  if (!item || !isJsonObject(raw)) return null;
+  const { x, y, angle, vx, vy, spin } = raw;
   if (!isWithin(x, MAX_COORDINATE) || !isWithin(y, MAX_COORDINATE)) return null;
   if (!isWithin(angle, MAX_COORDINATE)) return null;
   if (!isWithin(vx, MAX_SPEED) || !isWithin(vy, MAX_SPEED) || !isWithin(spin, MAX_SPEED)) {
     return null;
   }
-  return { tier, x, y, angle, vx, vy, spin };
+  return { ...item, x, y, angle, vx, vy, spin };
+}
+
+function readModifiers(raw: unknown): SnapshotModifiers | null {
+  if (!isJsonObject(raw)) return null;
+  const { jarWidth, preview, squishPower, goldenChance } = raw;
+  if (!isWithin(jarWidth, 2000) || jarWidth < 100) return null;
+  if (!isCounter(preview) || preview < 1 || preview > 4) return null;
+  if (!isWithin(squishPower, 10) || squishPower <= 0) return null;
+  if (!isWithin(goldenChance, 1) || goldenChance < 0) return null;
+  return { jarWidth, preview, squishPower, goldenChance };
 }
 
 /**
@@ -84,17 +119,24 @@ function readKey(raw: unknown, maxTier: number): KeySnapshot | null {
  */
 export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapshot | null {
   if (!isJsonObject(raw) || raw.v !== RUN_SNAPSHOT_VERSION) return null;
-  const { world, seed, rng, score, elapsedMs, drops, merges, bestTier, current, upcoming, aimX } =
-    raw;
+  const { world, seed, rng, score, elapsedMs, drops, merges, goldenMerges, megas, coins } = raw;
   if (typeof world !== 'string' || world === '') return null;
   if (!isUint32(seed) || !isUint32(rng)) return null;
-  if (!isCounter(score) || !isCounter(elapsedMs) || !isCounter(drops) || !isCounter(merges)) {
-    return null;
+  const counters = [score, elapsedMs, drops, merges, goldenMerges, megas, coins, raw.shakes];
+  if (!counters.every(isCounter) || !isCounter(raw.removes)) return null;
+  if (!isTier(raw.bestTier, limits.maxTier)) return null;
+  const current = readItem(raw.current, limits.maxTier);
+  if (!current) return null;
+  if (!Array.isArray(raw.upcoming) || raw.upcoming.length > 8) return null;
+  const upcoming: QueueItem[] = [];
+  for (const item of raw.upcoming as unknown[]) {
+    const read = readItem(item, limits.maxTier);
+    if (!read) return null;
+    upcoming.push(read);
   }
-  if (!isTier(bestTier, limits.maxTier) || !isTier(current, limits.maxTier)) return null;
-  if (!Array.isArray(upcoming) || upcoming.length > 8) return null;
-  if (!upcoming.every((tier) => isTier(tier, limits.maxTier))) return null;
-  if (!isWithin(aimX, MAX_COORDINATE)) return null;
+  if (!isWithin(raw.aimX, MAX_COORDINATE)) return null;
+  const modifiers = readModifiers(raw.modifiers);
+  if (!modifiers) return null;
   if (!Array.isArray(raw.keys) || raw.keys.length > limits.maxKeys) return null;
 
   const keys: KeySnapshot[] = [];
@@ -106,16 +148,22 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
   return {
     v: RUN_SNAPSHOT_VERSION,
     world,
-    seed,
-    rng,
-    score,
-    elapsedMs,
-    drops,
-    merges,
-    bestTier,
+    seed: seed as number,
+    rng: rng as number,
+    score: score as number,
+    elapsedMs: elapsedMs as number,
+    drops: drops as number,
+    merges: merges as number,
+    goldenMerges: goldenMerges as number,
+    megas: megas as number,
+    coins: coins as number,
+    bestTier: raw.bestTier as number,
     current,
-    upcoming: upcoming as number[],
-    aimX,
+    upcoming,
+    aimX: raw.aimX as number,
+    modifiers,
+    shakes: raw.shakes as number,
+    removes: raw.removes as number,
     keys,
   };
 }

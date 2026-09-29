@@ -5,10 +5,13 @@ import {
   JAR,
   MERGE,
   PHYSICS,
+  SHAKE,
   SPAWN,
   SQUISH,
   UNIT,
 } from '../../config/balance';
+import { mergeCoins } from '../../core/meta/coins';
+import { runModifiers, type RunModifiers } from '../../core/meta/upgrades';
 import { ComboCounter } from '../../core/run/combo';
 import { CooldownMap } from '../../core/run/cooldown';
 import { DangerTracker, type DangerSample, type DangerState } from '../../core/run/danger';
@@ -20,7 +23,7 @@ import {
 } from '../../core/run/merge';
 import { Rng, randomSeed } from '../../core/run/rng';
 import { RUN_SNAPSHOT_VERSION, type KeySnapshot, type RunSnapshot } from '../../core/run/snapshot';
-import { KeyQueue } from '../../core/run/spawn';
+import { KeyQueue, type QueueItem } from '../../core/run/spawn';
 import { formOf, maxTier, type ThemeData } from '../../themes';
 import type { MatterBody, MatterCollisionEvent, MatterEngine, MatterModule } from './matter';
 
@@ -41,6 +44,8 @@ export interface RunKey {
   /** Номер клавиши в забеге: чем меньше, тем раньше она появилась. */
   readonly id: number;
   readonly tier: number;
+  /** Золотая: блестит, а слияние с ней даёт монеты ×3. */
+  readonly golden: boolean;
   readonly width: number;
   readonly height: number;
   readonly body: MatterBody;
@@ -60,7 +65,7 @@ export type RunEvent =
   /** Клавиша сброшена в банку. */
   | { type: 'drop'; key: RunKey }
   /** Над банкой появилась новая клавиша (после паузы сброса). */
-  | { type: 'ready'; tier: number }
+  | { type: 'ready'; item: QueueItem }
   /** Клавиша впервые коснулась чего-нибудь после сброса. speed — скорость удара. */
   | { type: 'land'; key: RunKey; speed: number }
   /** Сильный удар о другую клавишу или банку. */
@@ -74,10 +79,17 @@ export type RunEvent =
       x: number;
       y: number;
       score: number;
+      /** В слиянии была золотая клавиша: результат тоже золотой, монеты ×3. */
+      golden: boolean;
+      coins: number;
       /** Шаг комбо: 0 — одиночное слияние, дальше тон выше на полутон за шаг. */
       combo: number;
     }
   | { type: 'squish'; key: RunKey }
+  /** «Встряска»: банку тряхнуло, клавиши подпрыгнули. */
+  | { type: 'shake' }
+  /** «Удаление»: клавиша убрана из банки. */
+  | { type: 'remove'; key: RunKey }
   /** Изменилось состояние линии опасности. */
   | { type: 'danger'; warning: boolean }
   | { type: 'gameover' };
@@ -85,19 +97,35 @@ export type RunEvent =
 export interface RunOptions {
   /** seed нового забега; по умолчанию случайный. */
   seed?: number;
-  /** Продолжить сохранённый забег. */
+  /** Продолжить сохранённый забег (его условия важнее modifiers). */
   snapshot?: RunSnapshot;
-  /** Сколько следующих клавиш видно в превью. */
-  preview?: number;
+  /** Что дали апгрейды; по умолчанию — без апгрейдов. */
+  modifiers?: RunModifiers;
+  /** Первые тиры по порядку (обучение первого забега). */
+  opening?: readonly number[];
 }
 
 export interface RunStats {
   score: number;
   drops: number;
   merges: number;
+  goldenMerges: number;
+  megas: number;
+  /** Монеты, заработанные в этом забеге. */
+  coins: number;
   bestTier: number;
   elapsedMs: number;
 }
+
+/** Забег без апгрейдов. */
+export const BASE_MODIFIERS: RunModifiers = runModifiers({
+  shake: 0,
+  remove: 0,
+  preview: 0,
+  squish: 0,
+  golden: 0,
+  jar: 0,
+});
 
 /** Толщина невидимых стенок физики: толстые стенки не пропускают даже очень быстрые клавиши. */
 const PHYSICS_WALL = 400;
@@ -125,7 +153,14 @@ export class Run {
   private readonly matter: MatterModule;
   private readonly engine: MatterEngine;
   private readonly rng: Rng;
+  /** Случайность для «Встряски»: отдельно, чтобы не менять очередь клавиш. */
+  private readonly fxRng: Rng;
   private readonly queue: KeyQueue;
+  private readonly squishPower: number;
+  private readonly goldenChance: number;
+  private readonly preview: number;
+  private shakesLeft: number;
+  private removesLeft: number;
   private readonly danger = new DangerTracker(DANGER.overflowMs);
   private readonly combo = new ComboCounter(COMBO.windowMs, COMBO.maxSteps);
   private readonly squishCooldown = new CooldownMap(SQUISH.cooldownMs);
@@ -149,27 +184,37 @@ export class Run {
     this.matter = matter;
     this.theme = theme;
     this.maxTier = maxTier(theme);
+    const snapshot = options.snapshot;
+    const modifiers = options.modifiers ?? BASE_MODIFIERS;
+    const saved = snapshot?.modifiers;
     this.jar = {
-      width: JAR.width,
+      width: saved?.jarWidth ?? modifiers.jarWidth,
       height: JAR.height,
       wall: JAR.wall,
       dangerY: JAR.dangerDepth,
     };
+    this.squishPower = saved?.squishPower ?? modifiers.squishPower;
+    this.goldenChance = saved?.goldenChance ?? modifiers.goldenChance;
+    this.preview = saved?.preview ?? modifiers.preview;
+    this.shakesLeft = snapshot?.shakes ?? modifiers.shakes;
+    this.removesLeft = snapshot?.removes ?? modifiers.removes;
 
-    const snapshot = options.snapshot;
     this.seed = snapshot?.seed ?? options.seed ?? randomSeed();
     this.rng = new Rng(snapshot?.rng ?? this.seed);
-    const preview = options.preview ?? 1;
+    this.fxRng = new Rng((this.seed ^ 0x5bd1e995) >>> 0);
     this.queue = new KeyQueue(
       this.rng,
       SPAWN,
-      preview,
+      { preview: this.preview, goldenChance: this.goldenChance, opening: options.opening },
       snapshot ? { current: snapshot.current, upcoming: snapshot.upcoming } : undefined,
     );
     this.stats = {
       score: snapshot?.score ?? 0,
       drops: snapshot?.drops ?? 0,
       merges: snapshot?.merges ?? 0,
+      goldenMerges: snapshot?.goldenMerges ?? 0,
+      megas: snapshot?.megas ?? 0,
+      coins: snapshot?.coins ?? 0,
       bestTier: snapshot?.bestTier ?? 1,
       elapsedMs: snapshot?.elapsedMs ?? 0,
     };
@@ -223,12 +268,22 @@ export class Run {
   }
 
   /** Клавиша над банкой. */
-  get currentTier(): number {
+  get current(): QueueItem {
     return this.queue.current;
   }
 
-  get upcoming(): readonly number[] {
+  get currentTier(): number {
+    return this.queue.current.tier;
+  }
+
+  /** Следующие клавиши (превью «Далее»). */
+  get upcoming(): readonly QueueItem[] {
     return this.queue.upcoming;
+  }
+
+  /** Оставшиеся заряды «Встряски» и «Удаления». */
+  get charges(): { shakes: number; removes: number } {
+    return { shakes: this.shakesLeft, removes: this.removesLeft };
   }
 
   /** Висящую клавишу уже можно сбросить (прошла пауза после прошлого сброса). */
@@ -241,7 +296,7 @@ export class Run {
   }
 
   /** Центр висящей клавиши по y. */
-  hangY(tier = this.queue.current): number {
+  hangY(tier = this.queue.current.tier): number {
     return -JAR.hangGap - this.sizeOf(tier).height / 2;
   }
 
@@ -272,8 +327,8 @@ export class Run {
   /** Сбросить висящую клавишу. false — ещё идёт пауза после прошлого сброса или забег окончен. */
   drop(): boolean {
     if (!this.canDrop) return false;
-    const tier = this.queue.current;
-    const key = this.addKey(tier, this.aim, this.hangY(tier), 0);
+    const { tier, golden } = this.queue.current;
+    const key = this.addKey(tier, golden, this.aim, this.hangY(tier), 0);
     key.settled = false;
     this.stats.drops += 1;
     this.queue.advance(this.stats.elapsedMs / 1000);
@@ -316,7 +371,7 @@ export class Run {
     if (!this.squishCooldown.tryUse(key.id, this.stats.elapsedMs)) return false;
     const { Body } = this.matter;
     const areaInUnits = (key.width * key.height) / (UNIT * UNIT);
-    const lift = SQUISH.impulse / areaInUnits ** SQUISH.sizeExponent;
+    const lift = (SQUISH.impulse * this.squishPower) / areaInUnits ** SQUISH.sizeExponent;
     // Тап сбоку чуть толкает клавишу в другую сторону: это маленький инструмент для скилла.
     const side = Math.max(-1, Math.min(1, (key.body.position.x - tapX) / (key.width / 2)));
     Body.setVelocity(key.body, {
@@ -324,6 +379,33 @@ export class Run {
       y: Math.min(key.body.velocity.y, 0) - lift,
     });
     this.emit({ type: 'squish', key });
+    return true;
+  }
+
+  /** «Встряска»: все клавиши подпрыгивают и перемешиваются. false — зарядов нет. */
+  shake(): boolean {
+    if (this.finished || this.shakesLeft <= 0) return false;
+    this.shakesLeft -= 1;
+    const { Body } = this.matter;
+    for (const key of this.keyMap.values()) {
+      const areaInUnits = (key.width * key.height) / (UNIT * UNIT);
+      const scale = 1 / areaInUnits ** SQUISH.sizeExponent;
+      Body.setVelocity(key.body, {
+        x: key.body.velocity.x + this.fxRng.range(-SHAKE.side, SHAKE.side) * scale,
+        y: Math.min(key.body.velocity.y, 0) - SHAKE.lift * scale * this.fxRng.range(0.7, 1.2),
+      });
+      Body.setAngularVelocity(key.body, this.fxRng.range(-SHAKE.spin, SHAKE.spin));
+    }
+    this.emit({ type: 'shake' });
+    return true;
+  }
+
+  /** «Удаление»: убрать клавишу из банки. false — зарядов нет. */
+  removeKey(key: RunKey): boolean {
+    if (this.finished || key.removed || this.removesLeft <= 0) return false;
+    this.removesLeft -= 1;
+    this.detach(key);
+    this.emit({ type: 'remove', key });
     return true;
   }
 
@@ -357,8 +439,9 @@ export class Run {
   snapshot(): RunSnapshot {
     const keys: KeySnapshot[] = [...this.keyMap.values()]
       .sort((a, b) => a.id - b.id)
-      .map(({ tier, body }) => ({
+      .map(({ tier, golden, body }) => ({
         tier,
+        golden,
         x: round(body.position.x, 2),
         y: round(body.position.y, 2),
         angle: round(body.angle, 4),
@@ -375,24 +458,35 @@ export class Run {
       elapsedMs: Math.round(this.stats.elapsedMs),
       drops: this.stats.drops,
       merges: this.stats.merges,
+      goldenMerges: this.stats.goldenMerges,
+      megas: this.stats.megas,
+      coins: this.stats.coins,
       bestTier: this.stats.bestTier,
-      current: this.queue.current,
-      upcoming: [...this.queue.upcoming],
+      current: { ...this.queue.current },
+      upcoming: this.queue.upcoming.map((item) => ({ ...item })),
       aimX: round(this.aim, 2),
+      modifiers: {
+        jarWidth: this.jar.width,
+        preview: this.preview,
+        squishPower: this.squishPower,
+        goldenChance: this.goldenChance,
+      },
+      shakes: this.shakesLeft,
+      removes: this.removesLeft,
       keys,
     };
   }
 
   /** Положить клавишу в банку (для обучения в M2, автотестов и снимков экрана). */
-  placeKey(tier: number, x: number, y: number): RunKey {
-    const key = this.addKey(tier, x, y, 0);
+  placeKey(tier: number, x: number, y: number, golden = false): RunKey {
+    const key = this.addKey(tier, golden, x, y, 0);
     this.stats.bestTier = Math.max(this.stats.bestTier, tier);
     return key;
   }
 
   /** Задать висящую клавишу (для обучения в M2 и автотестов). */
-  setCurrentTier(tier: number): void {
-    this.queue.replaceCurrent(tier);
+  setCurrentTier(tier: number, golden = false): void {
+    this.queue.replaceCurrent(tier, golden);
     this.aim = this.clampAim(this.aim);
   }
 
@@ -431,7 +525,7 @@ export class Run {
     this.flushEvents();
     this.applyMerges();
     this.updateDanger();
-    if (!wasReady && this.canDrop) this.emit({ type: 'ready', tier: this.queue.current });
+    if (!wasReady && this.canDrop) this.emit({ type: 'ready', item: this.queue.current });
   }
 
   private onCollision(event: MatterCollisionEvent, started: boolean): void {
@@ -468,7 +562,7 @@ export class Run {
 
   private applyMerges(): void {
     if (this.candidates.length === 0) return;
-    const { Body, Composite } = this.matter;
+    const { Body } = this.matter;
     for (const merge of planMerges(this.candidates, this.maxTier)) {
       const a = this.keyMap.get(merge.a);
       const b = this.keyMap.get(merge.b);
@@ -477,26 +571,28 @@ export class Run {
       const y = (a.body.position.y + b.body.position.y) / 2;
       const vx = (a.body.velocity.x + b.body.velocity.x) / 2;
       const vy = (a.body.velocity.y + b.body.velocity.y) / 2;
-      for (const key of [a, b]) {
-        key.removed = true;
-        Composite.remove(this.engine.world, key.body);
-        this.keyMap.delete(key.id);
-        this.byBody.delete(key.body.id);
-        this.squishCooldown.forget(key.id);
-      }
+      this.detach(a);
+      this.detach(b);
+      // Если хоть одна из клавиш золотая, результат тоже золотой (диздок, раздел 3).
+      const golden = a.golden || b.golden;
 
       let created: RunKey | null = null;
       if (merge.result.kind === 'form') {
         const tier = merge.result.tier;
         const { width } = this.sizeOf(tier);
         const cx = Math.min(this.jar.width - width / 2, Math.max(width / 2, x));
-        created = this.addKey(tier, cx, y, 0);
+        created = this.addKey(tier, golden, cx, y, 0);
         Body.setVelocity(created.body, { x: vx * 0.5, y: Math.min(vy, 0) - MERGE.upSpeed });
         this.stats.bestTier = Math.max(this.stats.bestTier, tier);
+      } else {
+        this.stats.megas += 1;
       }
       const score = mergeScore(merge.result);
+      const coins = mergeCoins(merge.result, golden);
       this.stats.score += score;
+      this.stats.coins += coins;
       this.stats.merges += 1;
+      if (golden) this.stats.goldenMerges += 1;
       const combo = this.combo.hit(this.stats.elapsedMs);
       this.emit({
         type: 'merge',
@@ -506,6 +602,8 @@ export class Run {
         x,
         y,
         score,
+        golden,
+        coins,
         combo,
       });
     }
@@ -528,7 +626,7 @@ export class Run {
     }
   }
 
-  private addKey(tier: number, x: number, y: number, angle: number): RunKey {
+  private addKey(tier: number, golden: boolean, x: number, y: number, angle: number): RunKey {
     const { Bodies, Body, Composite } = this.matter;
     const { width, height } = this.sizeOf(tier);
     const body = Bodies.rectangle(x, y, width, height, {
@@ -548,6 +646,7 @@ export class Run {
     const key: RunKey = {
       id: this.nextId,
       tier,
+      golden,
       width,
       height,
       body,
@@ -565,9 +664,18 @@ export class Run {
   }
 
   private restoreKey(saved: KeySnapshot): void {
-    const key = this.addKey(saved.tier, saved.x, saved.y, saved.angle);
+    const key = this.addKey(saved.tier, saved.golden, saved.x, saved.y, saved.angle);
     this.matter.Body.setVelocity(key.body, { x: saved.vx, y: saved.vy });
     this.matter.Body.setAngularVelocity(key.body, saved.spin);
+  }
+
+  /** Убрать клавишу из банки и из физики. */
+  private detach(key: RunKey): void {
+    key.removed = true;
+    this.matter.Composite.remove(this.engine.world, key.body);
+    this.keyMap.delete(key.id);
+    this.byBody.delete(key.body.id);
+    this.squishCooldown.forget(key.id);
   }
 
   private createWalls(): void {
@@ -595,7 +703,7 @@ export class Run {
   }
 
   private clampAim(x: number): number {
-    const half = this.sizeOf(this.queue.current).width / 2;
+    const half = this.sizeOf(this.queue.current.tier).width / 2;
     return Math.min(this.jar.width - half, Math.max(half, x));
   }
 
