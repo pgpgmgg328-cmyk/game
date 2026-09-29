@@ -281,3 +281,73 @@ test.describe('мета в забеге', () => {
     expect(problems).toEqual([]);
   });
 });
+
+test.describe('меню и пасхалки', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+
+  interface MenuState {
+    coins: string;
+    mascots: number;
+    asleep: boolean;
+    logoFirstRow: number;
+  }
+
+  async function menuState(page: Page): Promise<MenuState> {
+    const state = await e2eCall<MenuState | null>(page, 'menu');
+    if (!state) throw new Error('Меню не открыто');
+    return state;
+  }
+
+  test('мелодия на буквах логотипа слева направо — достижение «Пианист»', async ({ page }) => {
+    const problems = watchConsole(page);
+    await openGame(page, { lang: 'ru', seed: '5' });
+    const { logoFirstRow, mascots } = await menuState(page);
+    expect(logoFirstRow).toBe(6);
+    expect(mascots).toBeGreaterThan(0);
+    // Сбились — начинаем сначала: достижение только за мелодию целиком.
+    await e2eCall(page, 'pressLogo', 0, 0);
+    await e2eCall(page, 'pressLogo', 0, 2);
+    expect((await saveData(page)).achievements).not.toContain('pianist');
+    for (let index = 0; index < logoFirstRow; index += 1) {
+      await e2eCall(page, 'pressLogo', 0, index);
+    }
+    const save = await saveData(page);
+    expect(save.achievements).toContain('pianist');
+    expect(save.coins).toBe(100);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __e2e: { menu(): { coins: string } } }).__e2e.menu().coins ===
+        '100',
+    );
+    expect(problems).toEqual([]);
+  });
+
+  test('тайное слово на клавиатуре — дождь из клавиш и достижение', async ({ page }) => {
+    const problems = watchConsole(page);
+    await openGame(page, { lang: 'en', seed: '5' });
+    for (const code of ['KeyC', 'KeyL', 'KeyA', 'KeyC', 'KeyK']) await page.keyboard.press(code);
+    await page.waitForFunction(() =>
+      (window as unknown as { __e2e: { save(): { achievements: string[] } } }).__e2e
+        .save()
+        .achievements.includes('secret_word'),
+    );
+    // «КЛАЦ» на русской раскладке — те же физические клавиши R, K, F, W: пасхалка снова играет.
+    for (const code of ['KeyR', 'KeyK', 'KeyF', 'KeyW']) await page.keyboard.press(code);
+    expect(await e2eCall(page, 'scene')).toBe('Menu');
+    expect((await saveData(page)).coins).toBe(50);
+    expect(problems).toEqual([]);
+  });
+
+  test('без касаний персонажи засыпают, касание их будит', async ({ page }) => {
+    await openGame(page, { lang: 'ru', seed: '5' });
+    expect((await menuState(page)).asleep).toBe(false);
+    await e2eCall(page, 'idle', 30_000);
+    await page.waitForFunction(
+      () => (window as unknown as { __e2e: { menu(): { asleep: boolean } } }).__e2e.menu().asleep,
+    );
+    await page.mouse.click(40, 800);
+    await page.waitForFunction(
+      () => !(window as unknown as { __e2e: { menu(): { asleep: boolean } } }).__e2e.menu().asleep,
+    );
+  });
+});

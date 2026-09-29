@@ -4,6 +4,7 @@ import type { GameContext } from './context';
 import { e2eParams } from './e2eParams';
 import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
+import type { MenuScene } from './scenes/Menu';
 
 export interface E2eButton {
   id: string;
@@ -25,6 +26,10 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
   const gameScene = (): GameScene | null => {
     const scene = game.scene.getScene('Game') as GameScene | null;
     return scene && (scene.sys.isActive() || scene.sys.isPaused()) ? scene : null;
+  };
+  const menuScene = (): MenuScene | null => {
+    const scene = game.scene.getScene('Menu') as MenuScene | null;
+    return scene && scene.sys.isActive() ? scene : null;
   };
   (window as Window & { __e2e?: unknown }).__e2e = {
     scene: () => document.body.dataset.scene ?? '',
@@ -59,6 +64,12 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     /** Снимок забега из локального кэша (как его увидит игра после перезагрузки). */
     savedRun: () => ctx.platform.loadRunSnapshot(),
     stats: () => (ctx.saveLoaded ? ctx.save.data.stats : null),
+    /** Состояние меню: монеты, персонажи, спят ли они, длина первого ряда логотипа. */
+    menu: () => menuScene()?.debugState() ?? null,
+    /** Нажать букву логотипа (ряд и номер буквы). */
+    pressLogo: (row: number, index: number) => menuScene()?.debugPressLogo(row, index),
+    /** Промотать бездействие в меню. */
+    idle: (ms: number) => menuScene()?.debugIdle(ms),
     /** Всё сохранение: монеты, апгрейды, альбом, достижения. */
     save: () => (ctx.saveLoaded ? ctx.save.data : null),
     /**

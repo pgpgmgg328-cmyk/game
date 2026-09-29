@@ -8,7 +8,21 @@ export const MIN_BUTTON_HEIGHT = 110;
 
 export type ButtonVariant = 'primary' | 'secondary' | 'active';
 export type ButtonIcon =
-  'pause' | 'shake' | 'remove' | 'preview' | 'squish' | 'golden' | 'jar' | 'coin';
+  | 'pause'
+  | 'shake'
+  | 'remove'
+  | 'preview'
+  | 'squish'
+  | 'golden'
+  | 'jar'
+  | 'coin'
+  | 'play'
+  | 'worlds'
+  | 'album'
+  | 'upgrades'
+  | 'shop'
+  | 'leaderboard'
+  | 'settings';
 
 export interface ButtonOptions {
   /** Постоянный идентификатор кнопки (для автотестов). */
@@ -428,6 +442,100 @@ export function drawIcon(
         g.lineBetween(tip, y, tip - side * a, y - a);
         g.lineBetween(tip, y, tip - side * a, y + a);
       }
+      return;
+    }
+    case 'play': {
+      // Треугольник «▶».
+      const r = s * 0.42;
+      g.fillPoints(
+        [
+          new Phaser.Math.Vector2(x - r * 0.7, y - r),
+          new Phaser.Math.Vector2(x + r, y),
+          new Phaser.Math.Vector2(x - r * 0.7, y + r),
+        ],
+        true,
+      );
+      return;
+    }
+    case 'worlds': {
+      // Планета с кольцом.
+      g.strokeCircle(x, y, s * 0.3);
+      g.strokeEllipse(x, y + s * 0.02, s * 0.98, s * 0.3);
+      g.fillCircle(x - s * 0.1, y - s * 0.12, s * 0.06);
+      return;
+    }
+    case 'album': {
+      // Раскрытая книга.
+      const w = s * 0.4;
+      const h = s * 0.56;
+      g.strokeRoundedRect(x - w, y - h / 2, w, h, s * 0.06);
+      g.strokeRoundedRect(x, y - h / 2, w, h, s * 0.06);
+      g.lineBetween(x - w * 0.7, y - h * 0.18, x - w * 0.3, y - h * 0.18);
+      g.lineBetween(x + w * 0.3, y - h * 0.18, x + w * 0.7, y - h * 0.18);
+      g.lineBetween(x - w * 0.7, y + h * 0.1, x - w * 0.3, y + h * 0.1);
+      g.lineBetween(x + w * 0.3, y + h * 0.1, x + w * 0.7, y + h * 0.1);
+      return;
+    }
+    case 'upgrades': {
+      // Толстая стрелка вверх.
+      const r = s * 0.42;
+      g.fillPoints(
+        [
+          new Phaser.Math.Vector2(x, y - r),
+          new Phaser.Math.Vector2(x + r * 0.85, y),
+          new Phaser.Math.Vector2(x + r * 0.35, y),
+          new Phaser.Math.Vector2(x + r * 0.35, y + r),
+          new Phaser.Math.Vector2(x - r * 0.35, y + r),
+          new Phaser.Math.Vector2(x - r * 0.35, y),
+          new Phaser.Math.Vector2(x - r * 0.85, y),
+        ],
+        true,
+      );
+      return;
+    }
+    case 'shop': {
+      // Пакетик с ручкой.
+      const w = s * 0.66;
+      const h = s * 0.5;
+      g.strokeRoundedRect(x - w / 2, y - h / 2 + s * 0.1, w, h, s * 0.08);
+      g.beginPath();
+      g.arc(x, y - s * 0.12, s * 0.17, Math.PI, 0);
+      g.strokePath();
+      return;
+    }
+    case 'leaderboard': {
+      // Корона.
+      const w = s * 0.4;
+      const top = y - s * 0.3;
+      const bottom = y + s * 0.26;
+      g.fillPoints(
+        [
+          new Phaser.Math.Vector2(x - w, bottom),
+          new Phaser.Math.Vector2(x - w, top + s * 0.1),
+          new Phaser.Math.Vector2(x - w * 0.45, y),
+          new Phaser.Math.Vector2(x, top),
+          new Phaser.Math.Vector2(x + w * 0.45, y),
+          new Phaser.Math.Vector2(x + w, top + s * 0.1),
+          new Phaser.Math.Vector2(x + w, bottom),
+        ],
+        true,
+      );
+      return;
+    }
+    case 'settings': {
+      // Шестерёнка с дыркой.
+      const outer = s * 0.4;
+      const inner = s * 0.3;
+      const teeth = 8;
+      const points: Phaser.Math.Vector2[] = [];
+      for (let i = 0; i < teeth * 4; i += 1) {
+        const angle = (i / (teeth * 4)) * Math.PI * 2;
+        const r = i % 4 < 2 ? outer : inner;
+        points.push(new Phaser.Math.Vector2(x + Math.cos(angle) * r, y + Math.sin(angle) * r));
+      }
+      g.fillPoints(points, true);
+      g.lineStyle(Math.max(4, s * 0.1), 0xffffff, 1);
+      g.strokeCircle(x, y, s * 0.1);
       return;
     }
     case 'coin': {

@@ -169,6 +169,37 @@ export function goldenArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang, art
   return { ...art, key, colors: keyColors(form.paint, true), golden: true };
 }
 
+/**
+ * Силуэт неоткрытой формы для альбома: только очертания клавиши одним цветом.
+ * Рисуется на холсте, а не через tint: в запасном Canvas-рендере tint не работает,
+ * и силуэт выдал бы форму целиком.
+ */
+export function silhouetteTexture(scene: Phaser.Scene, art: KeyArt, color: string): string {
+  const key = `${art.key}:shadow:${color}`;
+  if (scene.textures.exists(key)) return key;
+  const canvas = createCanvas(
+    scene,
+    key,
+    (art.width + PAD * 2) * TEXTURE_SCALE,
+    (art.height + PAD * 2) * TEXTURE_SCALE,
+  );
+  if (!canvas) return art.key;
+  const { body } = keycapGeometry(art.width, art.height);
+  canvas.ctx.setTransform(
+    TEXTURE_SCALE,
+    0,
+    0,
+    TEXTURE_SCALE,
+    PAD * TEXTURE_SCALE,
+    PAD * TEXTURE_SCALE,
+  );
+  roundRectPath(canvas.ctx, body.x, body.y, body.w, body.h, body.r);
+  canvas.ctx.fillStyle = color;
+  canvas.ctx.fill();
+  canvas.texture.refresh();
+  return key;
+}
+
 /** Белые текстуры частиц: окрашиваются tint под цвет клавиши. */
 export function ensureFxArt(scene: Phaser.Scene): void {
   const size = 48;
@@ -346,6 +377,60 @@ function drawCoinBody(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: 
   ctx.lineWidth = 3;
   ctx.strokeStyle = GOLD.outline;
   ctx.stroke();
+}
+
+/** Клавиши логотипа: пастельные колпачки без надписи и лица, буква пишется поверх. */
+export const LOGO_COLORS = [
+  '#9ff0cf',
+  '#fff08a',
+  '#ffc49b',
+  '#8fd3ff',
+  '#c8f27a',
+  '#d7b8ff',
+  '#ffa8d2',
+] as const;
+export const LOGO_KEY_SIZE = 80;
+
+export function logoKeyTexture(index: number): string {
+  return `logo:key:${index % LOGO_COLORS.length}`;
+}
+
+/** Цвет буквы на клавише логотипа: тёмный оттенок цвета клавиши. */
+export function logoLetterColor(index: number): string {
+  const colors = keyColors({ kind: 'solid', color: LOGO_COLORS[index % LOGO_COLORS.length]! });
+  const { r, g, b } = colors.label;
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+}
+
+export function ensureLogoArt(scene: Phaser.Scene): void {
+  const size = LOGO_KEY_SIZE;
+  LOGO_COLORS.forEach((color, index) => {
+    const key = logoKeyTexture(index);
+    if (scene.textures.exists(key)) return;
+    const canvas = createCanvas(
+      scene,
+      key,
+      (size + PAD * 2) * TEXTURE_SCALE,
+      (size + PAD * 2) * TEXTURE_SCALE,
+    );
+    if (!canvas) return;
+    canvas.ctx.setTransform(
+      TEXTURE_SCALE,
+      0,
+      0,
+      TEXTURE_SCALE,
+      PAD * TEXTURE_SCALE,
+      PAD * TEXTURE_SCALE,
+    );
+    drawKeycap(canvas.ctx, keycapGeometry(size, size), { kind: 'solid', color }, { text: '' });
+    canvas.texture.refresh();
+  });
+}
+
+/** Центр верхней грани клавиши логотипа относительно центра клавиши (по вертикали). */
+export function logoFaceOffset(): number {
+  const { top } = keycapGeometry(LOGO_KEY_SIZE, LOGO_KEY_SIZE);
+  return top.y + top.h / 2 - LOGO_KEY_SIZE / 2;
 }
 
 /** Размер текстуры колпачка с полями, в единицах физики. */

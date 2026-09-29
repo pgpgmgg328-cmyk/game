@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { FaceFrame } from '../art/faceArt';
-import { FX, TEXTURE_SCALE, type KeyArt } from '../art/textures';
+import { FX, TEXTURE_SCALE, silhouetteTexture, type KeyArt } from '../art/textures';
 
 /** Пружинка сплющивания: жёсткость и затухание (1/с² и 1/с). */
 const SPRING_STIFFNESS = 380;
@@ -79,8 +79,8 @@ export class Keycap extends Phaser.GameObjects.Container {
   }
 
   /** Силуэт неоткрытой формы в альбоме: одноцветная клавиша без лица и искорок. */
-  setSilhouette(color: number, alpha: number): this {
-    this.base.setTintFill(color).setAlpha(alpha);
+  setSilhouette(color: string, alpha: number): this {
+    this.base.setTexture(silhouetteTexture(this.scene, this.art, color)).setAlpha(alpha);
     this.face.setVisible(false);
     this.glints.forEach((glint) => glint.image.setVisible(false));
     return this;

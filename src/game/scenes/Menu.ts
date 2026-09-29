@@ -1,22 +1,35 @@
 import Phaser from 'phaser';
+import { grantAchievements, type SecretAchievement } from '../../core/meta/achievements';
 import { albumProgress } from '../../core/meta/album';
 import { applyRunOutcome } from '../../core/meta/progress';
+import { SecretWordTracker } from '../../core/menu/easterEggs';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
-import { WORLD_SIZES } from '../../themes';
-import { Button } from '../ui/Button';
+import { DEFAULT_THEME_ID, THEMES, WORLD_SIZES, getTheme, type ThemeData } from '../../themes';
+import { achievementTitle } from '../achievementText';
+import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt, type KeyArt } from '../art/textures';
+import { keycapRain } from '../objects/KeycapRain';
+import { Mascots, SLEEP_AFTER_MS } from '../objects/Mascots';
+import { MenuLogo } from '../objects/MenuLogo';
+import { Particles } from '../objects/Particles';
+import { Toasts } from '../objects/Toasts';
+import { Button, type ButtonIcon } from '../ui/Button';
 import { COLORS } from '../ui/theme';
+import type { BackgroundScene } from './Background';
 import { BaseScene } from './BaseScene';
 import { titleStyle } from './titleStyle';
 
-const MENU_ITEMS: readonly { key: TranslationKey; scene: string }[] = [
-  { key: 'menu.worlds', scene: 'Worlds' },
-  { key: 'menu.album', scene: 'Album' },
-  { key: 'menu.upgrades', scene: 'Upgrades' },
-  { key: 'menu.shop', scene: 'Shop' },
-  { key: 'menu.leaderboard', scene: 'Leaderboard' },
-  { key: 'menu.settings', scene: 'Settings' },
+const MENU_ITEMS: readonly { key: TranslationKey; scene: string; icon: ButtonIcon }[] = [
+  { key: 'menu.worlds', scene: 'Worlds', icon: 'worlds' },
+  { key: 'menu.album', scene: 'Album', icon: 'album' },
+  { key: 'menu.upgrades', scene: 'Upgrades', icon: 'upgrades' },
+  { key: 'menu.shop', scene: 'Shop', icon: 'shop' },
+  { key: 'menu.leaderboard', scene: 'Leaderboard', icon: 'leaderboard' },
+  { key: 'menu.settings', scene: 'Settings', icon: 'settings' },
 ];
+
+/** Сколько места нужно сбоку от колонки, чтобы посадить туда персонажей. */
+const SIDE_MASCOTS_ROOM = 200;
 
 /** На низком экране (телефон в альбомной ориентации) кнопки встают в три колонки вместо двух. */
 const COMPACT_HEIGHT = 1000;
@@ -33,10 +46,20 @@ interface ResumeDialog {
 }
 
 export class MenuScene extends BaseScene {
-  private title!: Phaser.GameObjects.Text;
+  private logo!: MenuLogo;
   private play!: Button;
   private items: Button[] = [];
+  private coinPanel!: Phaser.GameObjects.Graphics;
+  private coinIcon!: Phaser.GameObjects.Image;
+  private coinText!: Phaser.GameObjects.Text;
+  private mascots!: Mascots;
+  private toasts!: Toasts;
+  private fx!: Particles;
+  private theme!: ThemeData;
+  private arts: KeyArt[] = [];
   private resume: ResumeDialog | null = null;
+  private secretWord = new SecretWordTracker();
+  private idleMs = 0;
 
   constructor() {
     super('Menu');
@@ -44,14 +67,31 @@ export class MenuScene extends BaseScene {
 
   create(): void {
     this.setupScreen();
-    const { t } = this.ctx;
-    // Название в две строки: «Сквиши Клавиши:» и «Мерж до Пробела».
-    this.title = this.createText(360, 0, t('game.title').replace(': ', ':\n'), titleStyle(60))
-      .setOrigin(0.5, 0)
-      .setLineSpacing(-8);
+    const { t, lang, save } = this.ctx;
+    this.secretWord = new SecretWordTracker();
+    this.idleMs = 0;
+    this.theme = getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
+    (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
+    ensureFxArt(this);
+    ensureUiArt(this);
+    this.arts = ensureThemeArt(this, this.theme, lang);
+
+    this.coinPanel = this.add.graphics();
+    this.coinIcon = this.add.image(0, 0, UI_ART.coin).setDisplaySize(44, 44);
+    this.coinText = this.createText(0, 0, formatNumber(save.data.coins, lang), {
+      fontSize: '34px',
+      fontStyle: '900',
+      color: COLORS.title,
+    }).setOrigin(0, 0.5);
+    // Название игры из клавиш-букв: по ним можно сыграть мелодию (пасхалка «Пианист»).
+    this.logo = new MenuLogo(this, t('game.title'), this.ctx.reducedMotion, {
+      onNote: (freq) => this.ctx.audio.note(freq),
+      onMelody: () => this.secret('pianist'),
+    });
     this.play = new Button(this, 360, 0, {
       id: 'menu.play',
       label: t('menu.play'),
+      icon: 'play',
       width: 480,
       height: 170,
       variant: 'primary',
@@ -63,12 +103,20 @@ export class MenuScene extends BaseScene {
         new Button(this, 0, 0, {
           id: item.key,
           label: t(item.key),
+          icon: item.icon,
           width: 320,
           height: 120,
-          fontSize: 40,
+          fontSize: 38,
           onClick: () => this.scene.start(item.scene),
         }),
     );
+    this.mascots = new Mascots(this, this.mascotArts(), this.ctx.reducedMotion, (tier) =>
+      this.ctx.audio.squish(tier),
+    );
+    this.fx = new Particles(this, this.ctx.reducedMotion);
+    this.add.existing(this.fx.layer);
+    this.toasts = new Toasts(this, this.ctx.reducedMotion);
+    this.bindEasterEggs();
     // Процент коллекции виден прямо на кнопке «Альбом» (диздок, раздел 6).
     const album = albumProgress(this.ctx.save.data.album, WORLD_SIZES);
     this.items.find((item) => item.id === 'menu.album')?.setBadge(`${album.percent}%`);
@@ -100,13 +148,31 @@ export class MenuScene extends BaseScene {
     this.game.events.once(Phaser.Core.Events.POST_RENDER, () => this.ctx.platform.ready());
   }
 
+  override update(time: number, delta: number): void {
+    this.logo.tick(time);
+    this.mascots.tick(delta, time);
+    this.toasts.tick(delta, time);
+    // Пасхалка: если долго ничего не трогать, персонажи засыпают.
+    this.idleMs += delta;
+    if (this.idleMs >= SLEEP_AFTER_MS && !this.resume) this.mascots.sleep();
+  }
+
   protected layoutScreen(height: number): void {
     const compact = height < COMPACT_HEIGHT;
-    this.title.setFontSize(compact ? 48 : 60);
-    this.title.setStroke(titleStyle(compact ? 48 : 60).stroke ?? '', compact ? 10 : 12);
-    this.title.setY(Math.min(Math.max(height * 0.05, 24), 90));
+    const { canvasWidth, column, scale } = this.ctx.layout;
+    const visibleLeft = -column.x / scale;
+    const visibleRight = visibleLeft + canvasWidth / scale;
+    const sideRoom = Math.min(-visibleLeft, visibleRight - 720);
 
-    const titleBottom = this.title.y + this.title.height;
+    // Монеты: в левом верхнем углу, а если сбоку есть место — на боковой панели.
+    const coinsInSide = compact && sideRoom >= SIDE_MASCOTS_ROOM;
+    this.placeCoins(coinsInSide ? visibleLeft / 2 : null, coinsInSide ? 60 : 54);
+    const logoTop = compact
+      ? coinsInSide
+        ? 20
+        : 100
+      : Math.min(Math.max(height * 0.07, 104), 150);
+    const titleBottom = this.logo.layout(logoTop, compact);
     const playHeight = compact ? 150 : 170;
     this.play.setButtonSize(compact ? 420 : 480, playHeight);
 
@@ -125,15 +191,160 @@ export class MenuScene extends BaseScene {
 
     const rowWidth = columns * itemWidth + (columns - 1) * gap;
     this.items.forEach((item, index) => {
-      const column = index % columns;
+      const col = index % columns;
       const row = Math.floor(index / columns);
       item.setButtonSize(itemWidth, itemHeight);
       item.setPosition(
-        360 - rowWidth / 2 + itemWidth / 2 + column * (itemWidth + gap),
+        360 - rowWidth / 2 + itemWidth / 2 + col * (itemWidth + gap),
         gridTop + itemHeight / 2 + row * (itemHeight + gap),
       );
     });
+    this.layoutMascots(height, gridTop + gridHeight, sideRoom, visibleLeft, visibleRight);
+    this.toasts.setAnchor(360, height - 80, 680);
     this.layoutResume(height);
+  }
+
+  /** Персонажи: по бокам, если там есть место, иначе внизу под кнопками, если помещаются. */
+  private layoutMascots(
+    height: number,
+    gridBottom: number,
+    sideRoom: number,
+    visibleLeft: number,
+    visibleRight: number,
+  ): void {
+    const ground = height - 24;
+    if (sideRoom >= SIDE_MASCOTS_ROOM) {
+      const size = Math.min(150, sideRoom * 0.32);
+      const left = visibleLeft / 2;
+      const right = (720 + visibleRight) / 2;
+      const spread = Math.min(sideRoom * 0.24, 110);
+      this.mascots.layout(
+        [
+          { x: left - spread, y: ground },
+          { x: right + spread, y: ground },
+          { x: left + spread, y: ground },
+          { x: right - spread, y: ground },
+        ],
+        spread * 2 - 16,
+        size,
+      );
+      return;
+    }
+    const free = ground - gridBottom - 24;
+    if (free < 110) {
+      this.mascots.layout([], 0, 0);
+      return;
+    }
+    const count = this.mascots.count;
+    const step = 660 / count;
+    this.mascots.layout(
+      Array.from({ length: count }, (_, index) => ({ x: 30 + step * (index + 0.5), y: ground })),
+      step - 18,
+      Math.min(130, free - 20),
+    );
+  }
+
+  private placeCoins(sideX: number | null, y: number): void {
+    const width = 44 + 10 + this.coinText.width + 36;
+    const x = sideX === null ? 24 : sideX - width / 2;
+    const g = this.coinPanel;
+    g.clear();
+    g.fillStyle(0xffffff, 0.85);
+    g.fillRoundedRect(x, y - 30, width, 60, 30);
+    g.lineStyle(3, 0xffd24a, 1);
+    g.strokeRoundedRect(x, y - 30, width, 60, 30);
+    this.coinIcon.setPosition(x + 18 + 22, y);
+    this.coinText.setPosition(x + 18 + 44 + 10, y);
+  }
+
+  /**
+   * Открытые формы мира, от больших к маленьким. Первые три клавиши новый игрок видит сразу,
+   * поэтому они есть всегда; неоткрытые формы в меню не появляются — их тайна для альбома.
+   */
+  private openedArts(): KeyArt[] {
+    const opened = this.ctx.save.data.album[this.theme.id]?.forms ?? [];
+    const tiers = new Set([1, 2, 3, ...opened.filter((tier) => tier <= this.arts.length)]);
+    return [...tiers].sort((a, b) => b - a).map((tier) => this.arts[tier - 1]!);
+  }
+
+  /** Персонажи меню: самые большие открытые формы. */
+  private mascotArts(): KeyArt[] {
+    return this.openedArts().slice(0, 4);
+  }
+
+  // ── Пасхалки ─────────────────────────────────────────────────────────────────────────
+
+  private bindEasterEggs(): void {
+    const wake = (): void => {
+      this.idleMs = 0;
+      this.mascots.wake();
+    };
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, wake);
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!this.sys.isActive()) return;
+      wake();
+      if (this.resume || event.repeat) return;
+      // Пасхалка: «КЛАЦ» или «CLACK» на клавиатуре (по event.code, раскладка не важна).
+      if (this.secretWord.press(event.code)) this.secret('secret_word');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    this.addCleanup(() => window.removeEventListener('keydown', onKeyDown));
+  }
+
+  /** Сработала пасхалка: праздник на экране и секретное достижение (один раз). */
+  private secret(id: SecretAchievement): void {
+    const { ctx } = this;
+    if (id === 'pianist') {
+      this.logo.cheer();
+      this.fx.celebrate(360, 160);
+      ctx.audio.record();
+    } else {
+      const { canvasWidth, canvasHeight, column, scale } = ctx.layout;
+      keycapRain(this, this.openedArts(), {
+        x: -column.x / scale,
+        y: -column.y / scale,
+        width: canvasWidth / scale,
+        height: canvasHeight / scale,
+      });
+      ctx.audio.rain();
+    }
+    let granted: ReturnType<typeof grantAchievements> = [];
+    ctx.save.update((draft) => {
+      granted = grantAchievements(draft, [id], WORLD_SIZES);
+    });
+    for (const def of granted) {
+      this.toasts.show({
+        icon: { kind: 'medal' },
+        title: ctx.t('game.achievement'),
+        detail: achievementTitle(def, ctx.t, ctx.lang),
+        coins: def.reward,
+      });
+      ctx.audio.achievement();
+    }
+    if (granted.length > 0) {
+      this.coinText.setText(formatNumber(ctx.save.data.coins, ctx.lang));
+      this.layoutScreen(this.screenHeight);
+    }
+  }
+
+  // ── Для автотестов ───────────────────────────────────────────────────────────────────
+
+  debugState(): { coins: string; mascots: number; asleep: boolean; logoFirstRow: number } {
+    return {
+      coins: this.coinText.text,
+      mascots: this.mascots.count,
+      asleep: this.mascots.asleep,
+      logoFirstRow: this.logo.firstRowLength,
+    };
+  }
+
+  debugPressLogo(row: number, index: number): void {
+    this.logo.press(row, index);
+  }
+
+  /** Промотать бездействие (для проверки засыпающих персонажей). */
+  debugIdle(ms: number): void {
+    this.idleMs += ms;
   }
 
   private startGame(): void {

@@ -101,6 +101,12 @@ export interface ThemePalette {
   readonly guide: string;
   /** Цвет лиц: глаза, брови, рот. */
   readonly face: string;
+  /** Фон: верх и низ мягкого градиента (диздок, раздел 12). */
+  readonly skyTop: string;
+  readonly skyBottom: string;
+  /** Узор клавиатуры на фоне: заливка клавиш и их контур. */
+  readonly pattern: string;
+  readonly patternLine: string;
 }
 
 export interface ThemeData {

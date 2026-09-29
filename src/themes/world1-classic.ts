@@ -11,6 +11,10 @@ export const WORLD1_CLASSIC: ThemeData = {
     danger: '#ff6f91',
     guide: '#6b5fb3',
     face: '#3a2e6e',
+    skyTop: '#bfe6ff',
+    skyBottom: '#ffd9ee',
+    pattern: '#ffffff',
+    patternLine: '#b8b0e8',
   },
   forms: [
     {

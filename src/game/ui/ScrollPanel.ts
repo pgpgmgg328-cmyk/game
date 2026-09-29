@@ -40,9 +40,16 @@ export class ScrollPanel {
     this.onTap = onTap;
     this.content = scene.add.container(0, 0);
     this.maskShape = scene.make.graphics({}, false);
-    this.content.setMask(this.maskShape.createGeometryMask());
+    const mask = this.maskShape.createGeometryMask();
+    this.content.setMask(mask);
     this.bar = scene.add.graphics();
     this.bindInput();
+    // Маска не входит в список отображения сцены: убираем её сами, иначе она останется в памяти.
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.content.clearMask();
+      mask.destroy();
+      this.maskShape.destroy();
+    });
   }
 
   /** Сколько прокручено (для автотестов). */

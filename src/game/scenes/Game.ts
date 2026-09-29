@@ -34,6 +34,7 @@ import { Toasts } from '../objects/Toasts';
 import { TutorialHand, type HintKind } from '../objects/TutorialHand';
 import { phaserMatter } from '../run/phaserMatter';
 import { Run, type RunEvent, type RunKey } from '../run/Run';
+import type { BackgroundScene } from './Background';
 import { BaseScene } from './BaseScene';
 import { titleStyle } from './titleStyle';
 
@@ -149,6 +150,7 @@ export class GameScene extends BaseScene {
     const { ctx } = this;
     const save = ctx.save.data;
     this.theme = getTheme(data.snapshot?.world ?? DEFAULT_THEME_ID) ?? THEMES[0]!;
+    (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
     this.art = ensureThemeArt(this, this.theme, ctx.lang);
     ensureFxArt(this);
     ensureUiArt(this);

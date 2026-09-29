@@ -13,7 +13,9 @@ import {
   playLegendary,
   playMega,
   playNewForm,
+  playNote,
   playPoof,
+  playRain,
   playRecord,
   playShake,
   playSquish,
@@ -153,6 +155,15 @@ export class AudioEngine {
 
   achievement(): void {
     this.play(true, 0.65, playAchievement);
+  }
+
+  /** Нота для «пианино» из букв логотипа. */
+  note(freq: number): void {
+    this.play(true, 0.45, (voice) => playNote(voice, freq));
+  }
+
+  rain(): void {
+    this.play(true, 0.6, playRain);
   }
 
   // ── Внутреннее ───────────────────────────────────────────────────────────────────────

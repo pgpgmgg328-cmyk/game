@@ -1,6 +1,15 @@
 import Phaser from 'phaser';
+import { achievementList } from '../../core/meta/achievements';
 import { formatNumber } from '../../i18n';
-import { DEFAULT_THEME_ID, THEMES, formOf, getTheme, type ThemeData } from '../../themes';
+import {
+  DEFAULT_THEME_ID,
+  THEMES,
+  WORLD_SIZES,
+  formOf,
+  getTheme,
+  type ThemeData,
+} from '../../themes';
+import { achievementTitle } from '../achievementText';
 import {
   UI_ART,
   ensureFxArt,
@@ -25,8 +34,14 @@ const COINS_MS = 600;
 const MAX_FORMS = 5;
 
 /** Блоки экрана по порядку важности: низкий экран показывает только первые. */
-type Block = 'score' | 'coins' | 'forms' | 'key';
-const BLOCK_HEIGHT: Record<Block, number> = { score: 240, coins: 76, forms: 200, key: 330 };
+type Block = 'score' | 'coins' | 'forms' | 'awards' | 'key';
+const BLOCK_HEIGHT: Record<Block, number> = {
+  score: 240,
+  coins: 76,
+  forms: 200,
+  awards: 70,
+  key: 330,
+};
 
 const EMPTY_SUMMARY: RunSummary = {
   score: 0,
@@ -56,6 +71,8 @@ export class ResultScene extends BaseScene {
   private formsLabel!: Phaser.GameObjects.Text;
   private forms: Keycap[] = [];
   private moreForms!: Phaser.GameObjects.Text;
+  private medal!: Phaser.GameObjects.Image;
+  private awards!: Phaser.GameObjects.Text;
   private keyLabel!: Phaser.GameObjects.Text;
   private keyName!: Phaser.GameObjects.Text;
   private keycap!: Keycap;
@@ -121,6 +138,17 @@ export class ResultScene extends BaseScene {
       color: COLORS.title,
     }).setOrigin(0.5);
     this.createForms(theme, arts);
+    // Достижения этого забега одной строкой: медаль и названия.
+    const defs = achievementList(WORLD_SIZES).filter((def) =>
+      this.summary.achievements.includes(def.id),
+    );
+    this.medal = this.add.image(0, 0, UI_ART.medal).setDisplaySize(52, 52);
+    this.awards = this.createText(
+      0,
+      0,
+      defs.map((def) => achievementTitle(def, t, lang)).join(', '),
+      { fontSize: '30px', fontStyle: '900', color: '#b8801f' },
+    ).setOrigin(0, 0.5);
     this.keyLabel = this.createText(360, 0, t('result.bestKey'), {
       fontSize: '30px',
       fontStyle: '800',
@@ -200,7 +228,10 @@ export class ResultScene extends BaseScene {
     const room = this.again.y - 55 - 24 - contentTop;
     const wanted: Block[] = ['score', 'coins'];
     if (this.forms.length > 0) wanted.push('forms');
+    if (this.awards.text !== '') wanted.push('awards');
     wanted.push('key');
+    this.medal.setVisible(false);
+    this.awards.setVisible(false);
     const shown: Block[] = [];
     let total = 0;
     for (const block of wanted) {
@@ -223,6 +254,9 @@ export class ResultScene extends BaseScene {
       const revealed = visible && this.coinsRevealed;
       this.forms.forEach((view) => view.setVisible(revealed));
       this.moreForms.setVisible(revealed && this.summary.newForms.length > MAX_FORMS);
+    } else if (block === 'awards') {
+      this.medal.setVisible(visible);
+      this.awards.setVisible(visible);
     } else if (block === 'key') {
       for (const item of [this.keyLabel, this.keycap, this.keyName]) item.setVisible(visible);
     }
@@ -248,6 +282,15 @@ export class ResultScene extends BaseScene {
           view.baseScale = (this.formScales[index] ?? 1) * scale;
         });
         this.moreForms.setPosition(left + this.forms.length * step, y + 122 * scale);
+        return;
+      }
+      case 'awards': {
+        const room = 620 - 64;
+        const fit = Math.min(1, room / Math.max(1, this.awards.width));
+        const width = 52 + 12 + this.awards.width * fit;
+        const left = 360 - width / 2;
+        this.medal.setPosition(left + 26, y + 34 * scale);
+        this.awards.setScale(fit).setPosition(left + 64, y + 34 * scale);
         return;
       }
       case 'key':

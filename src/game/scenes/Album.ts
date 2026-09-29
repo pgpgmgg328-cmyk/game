@@ -174,7 +174,7 @@ export class AlbumScene extends BaseScene {
       });
       keycap.baseScale = Math.min(1.6, 184 / art.width, 104 / art.height);
       keycap.setPosition(x + CELL_WIDTH / 2, y + 82);
-      if (!opened) keycap.setSilhouette(golden ? 0xd9b45a : SILHOUETTE, 0.4);
+      if (!opened) keycap.setSilhouette(golden ? '#d9b45a' : '#8e86b8', 0.4);
       keycap.tick(0, 0);
 
       const name = this.createText(

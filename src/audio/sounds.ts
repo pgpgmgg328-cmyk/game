@@ -334,3 +334,23 @@ export function playAchievement(voice: Voice): number {
     delay: 0.12,
   });
 }
+
+/** Нота «пианино» для клавиш логотипа: мягкий треугольник с колокольчиком сверху. */
+export function playNote(voice: Voice, freq: number): number {
+  tone(voice.ctx, voice.out, { freq: freq * 2, decay: 0.18, gain: 0.05 });
+  return tone(voice.ctx, voice.out, { type: 'triangle', freq, decay: 0.45, gain: 0.22 });
+}
+
+/** Дождь из клавиш: каскад тихих щелчков сверху вниз. */
+export function playRain(voice: Voice): number {
+  let length = 0;
+  for (let i = 0; i < 8; i += 1) {
+    length = tone(voice.ctx, voice.out, {
+      freq: 2093 - i * 160,
+      decay: 0.06,
+      gain: 0.07,
+      delay: i * 0.06,
+    });
+  }
+  return length;
+}
