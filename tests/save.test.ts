@@ -12,10 +12,15 @@ describe('readSave', () => {
 
   it('читает корректное сохранение текущей версии', () => {
     const save: Save = {
-      v: 2,
+      v: 3,
       rev: 7,
       settings: { sound: false, music: true },
-      stats: { bestScore: 1234, runs: 5 },
+      stats: { bestScore: 1234, runs: 5, merges: 300, goldenMerges: 4, megas: 1 },
+      coins: 950,
+      upgrades: { shake: 1, remove: 0, preview: 1, squish: 2, golden: 5, jar: 3 },
+      album: { classic: { forms: [1, 2, 3, 7], golden: [2] } },
+      achievements: ['first_clack', 'caps'],
+      tutorial: { done: true, squish: false },
     };
     expect(readSave(save)).toEqual({ kind: 'ok', save });
   });
@@ -34,40 +39,71 @@ describe('readSave', () => {
 
   it('заменяет битые поля значениями по умолчанию и сохраняет остальные', () => {
     const result = readSave({
-      v: 2,
+      v: 3,
       rev: -5,
       settings: { sound: 'нет', music: false },
-      stats: { bestScore: 1.5, runs: 3 },
+      stats: { bestScore: 1.5, runs: 3, merges: -1 },
+      coins: 'много',
+      upgrades: { shake: 99, remove: 2, jar: 'x' },
+      album: {
+        classic: { forms: [3, 1, 3, 0, 31, 2.5, 'a', 2], golden: 'нет' },
+        'Не латиница': { forms: [1] },
+        space: 'мусор',
+      },
+      achievements: ['caps', 'caps', 42, 'Плохой id'],
+      tutorial: { done: 'да', squish: true },
       junk: 1,
     });
     expect(result).toEqual({
       kind: 'ok',
       save: {
-        v: 2,
+        v: 3,
         rev: 0,
         settings: { sound: true, music: false },
-        stats: { bestScore: 0, runs: 3 },
+        stats: { bestScore: 0, runs: 3, merges: 0, goldenMerges: 0, megas: 0 },
+        coins: 0,
+        // Уровень выше максимума обрезается до максимума.
+        upgrades: { shake: 3, remove: 2, preview: 0, squish: 0, golden: 0, jar: 0 },
+        album: { classic: { forms: [1, 2, 3], golden: [] } },
+        achievements: ['caps'],
+        tutorial: { done: false, squish: true },
       },
     });
   });
 
   it('не падает, если settings и stats — не объекты', () => {
-    expect(readSave({ v: 2, rev: 3, settings: null, stats: 'много' })).toEqual({
+    expect(readSave({ v: 3, rev: 3, settings: null, stats: 'много' })).toEqual({
       kind: 'ok',
       save: { ...createDefaultSave(), rev: 3 },
     });
   });
 
-  it('сохранение версии 1 переводится в версию 2 с сохранением настроек', () => {
+  it('сохранение версии 1 переводится в текущую версию с сохранением настроек', () => {
     expect(readSave({ v: 1, rev: 9, settings: { sound: false, music: true } })).toEqual({
       kind: 'ok',
+      save: { ...createDefaultSave(), rev: 9, settings: { sound: false, music: true } },
+    });
+  });
+
+  it('версия 2 → 3: рекорд сохраняется, кто уже играл — без обучения', () => {
+    const played = readSave({
+      v: 2,
+      rev: 4,
+      settings: { sound: true, music: false },
+      stats: { bestScore: 700, runs: 3 },
+    });
+    expect(played).toEqual({
+      kind: 'ok',
       save: {
-        v: 2,
-        rev: 9,
-        settings: { sound: false, music: true },
-        stats: { bestScore: 0, runs: 0 },
+        ...createDefaultSave(),
+        rev: 4,
+        settings: { sound: true, music: false },
+        stats: { bestScore: 700, runs: 3, merges: 0, goldenMerges: 0, megas: 0 },
+        tutorial: { done: true, squish: true },
       },
     });
+    const fresh = readSave({ v: 2, rev: 1, stats: { bestScore: 0, runs: 0 } });
+    expect(fresh.kind === 'ok' && fresh.save.tutorial).toEqual({ done: false, squish: false });
   });
 
   it('распознаёт сохранение из более новой версии игры', () => {
@@ -130,10 +166,10 @@ describe('readSave', () => {
 
 describe('restoreSave', () => {
   const save = (rev: number, sound = true): Save => ({
-    v: 2,
+    ...createDefaultSave(),
     rev,
     settings: { sound, music: true },
-    stats: { bestScore: rev * 10, runs: rev },
+    stats: { bestScore: rev * 10, runs: rev, merges: rev, goldenMerges: 0, megas: 0 },
   });
 
   it('без данных начинает с сохранения по умолчанию', () => {
@@ -170,7 +206,7 @@ describe('restoreSave', () => {
   });
 
   it('не разрешает запись, если где-то лежит сохранение новее версии игры', () => {
-    expect(restoreSave({ cloud: { v: 3, rev: 10 }, local: save(1) })).toEqual({
+    expect(restoreSave({ cloud: { v: 4, rev: 10 }, local: save(1) })).toEqual({
       save: save(1),
       writable: false,
       source: 'local',

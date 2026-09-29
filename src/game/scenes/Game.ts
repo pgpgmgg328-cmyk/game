@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DROP, JAR, RUN, SQUISH } from '../../config/balance';
 import { actionForKey } from '../../core/input';
-import { applyRunResult } from '../../core/run/result';
+import { applyRunOutcome, type RunOutcome } from '../../core/meta/progress';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber } from '../../i18n';
 import { DEFAULT_THEME_ID, THEMES, formOf, getTheme, type ThemeData } from '../../themes';
@@ -473,13 +473,20 @@ export class GameScene extends BaseScene {
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
     const stats = this.run.getStats();
-    const outcome = applyRunResult(ctx.save.data.stats, stats.score, true);
+    let outcome: RunOutcome = { newRecord: false, coins: 0, bonus: 0 };
     ctx.save.update((draft) => {
-      draft.stats = outcome.stats;
+      outcome = applyRunOutcome(draft, {
+        score: stats.score,
+        completed: true,
+        merges: stats.merges,
+        goldenMerges: 0,
+        megas: 0,
+        coins: 0,
+      });
     });
     const summary: RunSummary = {
       score: stats.score,
-      best: outcome.stats.bestScore,
+      best: ctx.save.data.stats.bestScore,
       newRecord: outcome.newRecord,
       bestTier: stats.bestTier,
       world: this.theme.id,
@@ -522,12 +529,17 @@ export class GameScene extends BaseScene {
     if (this.ending) return;
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
-    const outcome = applyRunResult(ctx.save.data.stats, this.run.score, false);
-    if (outcome.newRecord) {
-      ctx.save.update((draft) => {
-        draft.stats = outcome.stats;
+    const stats = this.run.getStats();
+    ctx.save.update((draft) => {
+      applyRunOutcome(draft, {
+        score: stats.score,
+        completed: false,
+        merges: stats.merges,
+        goldenMerges: 0,
+        megas: 0,
+        coins: 0,
       });
-    }
+    });
   }
 
   // ── Ввод ─────────────────────────────────────────────────────────────────────────────

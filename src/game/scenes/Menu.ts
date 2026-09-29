@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { applyRunResult } from '../../core/run/result';
+import { applyRunOutcome } from '../../core/meta/progress';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
 import { Button } from '../ui/Button';
@@ -189,12 +189,17 @@ export class MenuScene extends BaseScene {
     // Забег не продолжаем, но его счёт мог быть рекордом.
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
-    const outcome = applyRunResult(ctx.save.data.stats, dialog.snapshot.score, false);
-    if (outcome.newRecord) {
-      ctx.save.update((draft) => {
-        draft.stats = outcome.stats;
+    const { snapshot } = dialog;
+    ctx.save.update((draft) => {
+      applyRunOutcome(draft, {
+        score: snapshot.score,
+        completed: false,
+        merges: snapshot.merges,
+        goldenMerges: 0,
+        megas: 0,
+        coins: 0,
       });
-    }
+    });
     this.setMenuEnabled(true);
   }
 

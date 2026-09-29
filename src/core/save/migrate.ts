@@ -7,6 +7,13 @@ export type Migration = (data: JsonObject) => JsonObject;
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   // v1 → v2 (M1): появилась статистика — рекорд и число забегов.
   1: (data) => ({ ...data, v: 2, stats: { bestScore: 0, runs: 0 } }),
+  // v2 → v3 (M2): монеты, апгрейды, альбом, достижения и обучение. Кто уже доиграл забег,
+  // умеет играть: обучение ему не показываем. Остальные поля заполнит sanitizeSave.
+  2: (data) => {
+    const stats = isJsonObject(data.stats) ? data.stats : {};
+    const played = typeof stats.runs === 'number' && stats.runs > 0;
+    return { ...data, v: 3, tutorial: { done: played, squish: played } };
+  },
 };
 
 export type ReadResult =

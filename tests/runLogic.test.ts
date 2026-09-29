@@ -5,7 +5,6 @@ import { CooldownMap } from '../src/core/run/cooldown';
 import { DangerTracker } from '../src/core/run/danger';
 import { mergeResult, mergeScore, planMerges } from '../src/core/run/merge';
 import { Rng } from '../src/core/run/rng';
-import { applyRunResult } from '../src/core/run/result';
 import { offerableSnapshot, readRunSnapshot, type RunSnapshot } from '../src/core/run/snapshot';
 import { KeyQueue, pickTier, spawnWeightsAt } from '../src/core/run/spawn';
 
@@ -259,23 +258,5 @@ describe('снимок забега', () => {
       { ...valid, keys: new Array(151).fill(valid.keys[0]) },
     ];
     broken.forEach((raw) => expect(readRunSnapshot(raw, limits)).toBeNull());
-  });
-});
-
-describe('итог забега', () => {
-  it('рекорд обновляется только большим счётом, доигранный забег считается', () => {
-    const stats = { bestScore: 500, runs: 2 };
-    expect(applyRunResult(stats, 800, true)).toEqual({
-      stats: { bestScore: 800, runs: 3 },
-      newRecord: true,
-    });
-    expect(applyRunResult(stats, 500, true)).toEqual({
-      stats: { bestScore: 500, runs: 3 },
-      newRecord: false,
-    });
-    expect(applyRunResult(stats, 900, false)).toEqual({
-      stats: { bestScore: 900, runs: 2 },
-      newRecord: true,
-    });
   });
 });
