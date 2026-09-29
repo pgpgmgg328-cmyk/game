@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   e2eCall,
   expectButtonsFit,
+  getButton,
   openGame,
   patchSave,
   press,
@@ -19,6 +20,7 @@ const JAR_HEIGHT = 800;
 
 interface SaveData {
   coins: number;
+  upgrades: Record<string, number>;
   album: Record<string, { forms: number[]; golden: number[] }>;
   achievements: string[];
   stats: { merges: number; goldenMerges: number };
@@ -220,5 +222,62 @@ test.describe('мета в забеге', () => {
       20_000,
     );
     expect(last).toBeLessThan(2500);
+  });
+
+  test('апгрейды: покупка списывает монеты, поднимает уровень и переживает перезагрузку', async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    await openGame(page, { lang: 'ru', seed: '5' });
+    await patchSave(page, { ...VETERAN_SAVE, coins: 1000 });
+    await press(page, 'menu.upgrades', true);
+    await waitScene(page, 'Upgrades');
+    await expectButtonsFit(page);
+    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('150');
+    await press(page, 'upgrades.buy.shake', true);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __e2e: { save(): { upgrades: { shake: number } } } }).__e2e.save()
+          .upgrades.shake === 1,
+    );
+    expect((await saveData(page)).coins).toBe(850);
+    // Цена следующего уровня выросла в 1,6 раза.
+    expect((await getButton(page, 'upgrades.buy.shake')).label).toBe('240');
+
+    // «+1 к предпросмотру» — один уровень: после покупки кнопка показывает «МАКС».
+    await press(page, 'upgrades.buy.preview', true);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __e2e: { save(): { upgrades: { preview: number } } } }).__e2e.save()
+          .upgrades.preview === 1,
+    );
+    expect((await saveData(page)).coins).toBe(450);
+    await page.reload();
+    await waitScene(page, 'Menu');
+    await press(page, 'menu.upgrades', true);
+    await waitScene(page, 'Upgrades');
+    const buttons = await e2eCall<{ id: string; label: string }[]>(page, 'buttons');
+    // Кнопка на максимуме выключена и в списке нажимаемых её нет; купленный уровень на месте.
+    expect(buttons.find((b) => b.id === 'upgrades.buy.preview')?.label ?? 'МАКС').toBe('МАКС');
+    expect((await saveData(page)).upgrades).toMatchObject({ shake: 1, preview: 1 });
+    expect(problems).toEqual([]);
+  });
+
+  test('альбом открывается, листается и возвращает в меню', async ({ page }) => {
+    const problems = watchConsole(page);
+    await openGame(page, { lang: 'ru', seed: '5' });
+    await patchSave(page, {
+      album: { classic: { forms: [1, 2, 3, 4, 5, 6, 7], golden: [2] } },
+      achievements: ['first_clack', 'caps'],
+    });
+    await press(page, 'menu.album', true);
+    await waitScene(page, 'Album');
+    await expectButtonsFit(page);
+    await page.mouse.move(195, 420);
+    await page.mouse.wheel(0, 2000);
+    await page.waitForTimeout(300);
+    await press(page, 'common.back', true);
+    await waitScene(page, 'Menu');
+    expect(problems).toEqual([]);
   });
 });

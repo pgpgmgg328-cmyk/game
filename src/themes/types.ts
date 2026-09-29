@@ -71,6 +71,8 @@ export interface FormData {
   /** Номер формы: 1…11. */
   readonly tier: number;
   readonly name: LocalizedText;
+  /** Смешная подпись в альбоме, одна короткая строка (диздок, раздел 6). */
+  readonly caption: LocalizedText;
   readonly label: KeyLabel;
   /** Размер в U, где U — ширина банки / 12. */
   readonly size: { readonly w: number; readonly h: number };

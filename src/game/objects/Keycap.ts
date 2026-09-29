@@ -41,6 +41,7 @@ export interface KeycapOptions {
  */
 export class Keycap extends Phaser.GameObjects.Container {
   readonly art: KeyArt;
+  private readonly base: Phaser.GameObjects.Image;
   private readonly face: Phaser.GameObjects.Image;
   private readonly idle: boolean;
   private readonly random: () => number;
@@ -65,6 +66,7 @@ export class Keycap extends Phaser.GameObjects.Container {
     this.blinkIn = this.nextBlinkDelay();
 
     const base = new Phaser.GameObjects.Image(scene, 0, 0, art.key).setScale(1 / TEXTURE_SCALE);
+    this.base = base;
     this.face = new Phaser.GameObjects.Image(
       scene,
       art.faceLayout.offsetX,
@@ -74,6 +76,14 @@ export class Keycap extends Phaser.GameObjects.Container {
     ).setScale(1 / TEXTURE_SCALE);
     this.add([base, this.face]);
     if (art.golden) this.createGlints(scene);
+  }
+
+  /** Силуэт неоткрытой формы в альбоме: одноцветная клавиша без лица и искорок. */
+  setSilhouette(color: number, alpha: number): this {
+    this.base.setTintFill(color).setAlpha(alpha);
+    this.face.setVisible(false);
+    this.glints.forEach((glint) => glint.image.setVisible(false));
+    return this;
   }
 
   /** Удар или тап: amount 0…1 — насколько сильно сплющить. Отрицательный — вытянуть. */

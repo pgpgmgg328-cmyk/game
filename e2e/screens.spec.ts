@@ -79,6 +79,29 @@ for (const size of SIZES) {
       expect(problems).toEqual([]);
     });
 
+    test('альбом и апгрейды помещаются целиком, скриншоты', async ({ page }) => {
+      const problems = watchConsole(page);
+      await openGame(page, { lang: 'ru', seed: '7' });
+      await patchSave(page, {
+        ...UPGRADED_SAVE,
+        album: { classic: { forms: [1, 2, 3, 4, 5, 6, 7, 9], golden: [2, 4] } },
+        achievements: ['first_clack', 'caps'],
+      });
+      await press(page, 'menu.album', size.mobile);
+      await waitScene(page, 'Album');
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      if (size.allScreens) await screenshot(page, `album-ru-${name}`);
+      await press(page, 'common.back', size.mobile);
+      await waitScene(page, 'Menu');
+      await press(page, 'menu.upgrades', size.mobile);
+      await waitScene(page, 'Upgrades');
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      if (size.allScreens) await screenshot(page, `upgrades-ru-${name}`);
+      expect(problems).toEqual([]);
+    });
+
     test('забег, пауза и результат помещаются целиком, скриншоты', async ({ page }) => {
       // Без видеокарты WebGL рисует процессор: на 768×1024 при DPR 2 (холст 1536×2048) кадров
       // всего несколько в секунду, а в параллельном прогоне ещё меньше. Тесту нужно больше времени.

@@ -7,7 +7,8 @@ export const BUTTON_DEPTH = 14;
 export const MIN_BUTTON_HEIGHT = 110;
 
 export type ButtonVariant = 'primary' | 'secondary' | 'active';
-export type ButtonIcon = 'pause' | 'shake' | 'remove';
+export type ButtonIcon =
+  'pause' | 'shake' | 'remove' | 'preview' | 'squish' | 'golden' | 'jar' | 'coin';
 
 export interface ButtonOptions {
   /** Постоянный идентификатор кнопки (для автотестов). */
@@ -62,7 +63,7 @@ export class Button extends Phaser.GameObjects.Container {
   private readonly label: Phaser.GameObjects.Text | null;
   private variant: ButtonVariant;
   private readonly baseVariant: ButtonVariant;
-  private readonly icon: ButtonIcon | null;
+  private icon: ButtonIcon | null;
   private readonly baseFontSize: number;
   private buttonWidth: number;
   private buttonHeight: number;
@@ -124,11 +125,24 @@ export class Button extends Phaser.GameObjects.Container {
     this.applySize();
   }
 
-  /** Прямоугольник кнопки в координатах сцены с учётом масштаба (например, пульсации). */
+  /** Прямоугольник кнопки в координатах сцены с учётом масштаба и родительских контейнеров. */
   worldRect(): Phaser.Geom.Rectangle {
+    const matrix = this.getWorldTransformMatrix();
+    const width = this.buttonWidth * Math.abs(matrix.scaleX);
+    const height = this.buttonHeight * Math.abs(matrix.scaleY);
+    return new Phaser.Geom.Rectangle(matrix.tx - width / 2, matrix.ty - height / 2, width, height);
+  }
+
+  /** Прямоугольник кнопки в координатах родителя (например, прокручиваемого списка). */
+  localRect(): Phaser.Geom.Rectangle {
     const width = this.buttonWidth * Math.abs(this.scaleX);
     const height = this.buttonHeight * Math.abs(this.scaleY);
     return new Phaser.Geom.Rectangle(this.x - width / 2, this.y - height / 2, width, height);
+  }
+
+  /** Отменить нажатие (палец начал листать список): при отпускании кнопка не сработает. */
+  cancelPress(): void {
+    this.setPressed(false);
   }
 
   /** Текст на кнопке. */
@@ -139,11 +153,13 @@ export class Button extends Phaser.GameObjects.Container {
   setText(value: string): this {
     this.label?.setText(value);
     this.fitLabel();
+    // Значок стоит рядом с надписью: после смены текста их надо расставить заново.
+    this.redraw();
     return this;
   }
 
-  /** Счётчик в углу кнопки (например, заряды «Встряски»); null — без счётчика. */
-  setBadge(value: number | null): this {
+  /** Значок в углу кнопки: заряды «Встряски», процент альбома; null — без значка. */
+  setBadge(value: number | string | null): this {
     if (value === null) {
       this.badge?.setVisible(false);
       this.redraw();
@@ -157,6 +173,15 @@ export class Button extends Phaser.GameObjects.Container {
       this.add(this.badge);
     }
     this.badge.setText(String(value)).setVisible(true);
+    this.redraw();
+    return this;
+  }
+
+  /** Сменить значок (null — без значка). */
+  setIcon(icon: ButtonIcon | null): this {
+    if (this.icon === icon) return this;
+    this.icon = icon;
+    this.fitLabel();
     this.redraw();
     return this;
   }
@@ -262,19 +287,33 @@ export class Button extends Phaser.GameObjects.Container {
       drawIcon(g, this.icon, iconX, centerY, faceHeight * ICON_SIZE, color);
     }
     if (this.badge?.visible) {
-      const x = width / 2 - BADGE_RADIUS * 0.55;
+      // Кружок для числа, «таблетка» для надписи подлиннее (например, «54%»).
+      const badgeWidth = Math.max(BADGE_RADIUS * 2, this.badge.width + 8);
+      const x = width / 2 - badgeWidth / 2 + BADGE_RADIUS * 0.45;
       const y = top - BADGE_RADIUS * 0.25;
       g.fillStyle(0xff6f91, 1);
-      g.fillCircle(x, y, BADGE_RADIUS);
+      g.fillRoundedRect(
+        x - badgeWidth / 2,
+        y - BADGE_RADIUS,
+        badgeWidth,
+        BADGE_RADIUS * 2,
+        BADGE_RADIUS,
+      );
       g.lineStyle(4, 0xffffff, 1);
-      g.strokeCircle(x, y, BADGE_RADIUS);
+      g.strokeRoundedRect(
+        x - badgeWidth / 2,
+        y - BADGE_RADIUS,
+        badgeWidth,
+        BADGE_RADIUS * 2,
+        BADGE_RADIUS,
+      );
       this.badge.setPosition(x, y);
     }
   }
 }
 
-/** Значки кнопок: рисуются линиями, чтобы быть чёткими на любом экране. size — ширина значка. */
-function drawIcon(
+/** Значки кнопок и карточек: рисуются линиями, чтобы быть чёткими на любом экране. size — ширина. */
+export function drawIcon(
   g: Phaser.GameObjects.Graphics,
   icon: ButtonIcon,
   x: number,
@@ -328,6 +367,80 @@ function drawIcon(
       g.lineStyle(Math.max(5, s * 0.13), color, 1);
       g.lineBetween(x - d, y - d, x + d, y + d);
       g.lineBetween(x + d, y - d, x - d, y + d);
+      return;
+    }
+    case 'preview': {
+      // Глаз: «видно следующие клавиши».
+      const w = s * 0.5;
+      const h = s * 0.3;
+      const upper = new Phaser.Curves.QuadraticBezier(
+        new Phaser.Math.Vector2(x - w, y),
+        new Phaser.Math.Vector2(x, y - h * 1.6),
+        new Phaser.Math.Vector2(x + w, y),
+      );
+      const lower = new Phaser.Curves.QuadraticBezier(
+        new Phaser.Math.Vector2(x + w, y),
+        new Phaser.Math.Vector2(x, y + h * 1.6),
+        new Phaser.Math.Vector2(x - w, y),
+      );
+      g.strokePoints([...upper.getPoints(16), ...lower.getPoints(16)], true, true);
+      g.fillCircle(x, y, s * 0.15);
+      return;
+    }
+    case 'squish': {
+      // Сплющенная клавиша и «пружинки» над ней.
+      const w = s * 0.78;
+      const h = s * 0.4;
+      g.strokeRoundedRect(x - w / 2, y - h / 2 + s * 0.16, w, h, s * 0.12);
+      g.lineBetween(x - s * 0.22, y - s * 0.2, x - s * 0.3, y - s * 0.38);
+      g.lineBetween(x, y - s * 0.2, x, y - s * 0.42);
+      g.lineBetween(x + s * 0.22, y - s * 0.2, x + s * 0.3, y - s * 0.38);
+      return;
+    }
+    case 'golden': {
+      // Клавиша со звёздочкой-искрой.
+      const k = s * 0.62;
+      g.strokeRoundedRect(x - k / 2 - s * 0.06, y - k / 2 + s * 0.06, k, k, s * 0.12);
+      const star: Phaser.Math.Vector2[] = [];
+      for (let i = 0; i < 8; i += 1) {
+        const r = i % 2 === 0 ? s * 0.24 : s * 0.08;
+        const angle = -Math.PI / 2 + (i * Math.PI) / 4;
+        star.push(
+          new Phaser.Math.Vector2(
+            x + s * 0.26 + Math.cos(angle) * r,
+            y - s * 0.26 + Math.sin(angle) * r,
+          ),
+        );
+      }
+      g.fillPoints(star, true);
+      return;
+    }
+    case 'jar': {
+      // Банка и стрелки в стороны: «банка шире».
+      const w = s * 0.46;
+      const h = s * 0.6;
+      g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, s * 0.1);
+      const a = s * 0.12;
+      for (const side of [-1, 1]) {
+        const tip = x + side * s * 0.5;
+        const from = x + side * s * 0.3;
+        g.lineBetween(from, y, tip, y);
+        g.lineBetween(tip, y, tip - side * a, y - a);
+        g.lineBetween(tip, y, tip - side * a, y + a);
+      }
+      return;
+    }
+    case 'coin': {
+      // Монетка «клац»: золото не зависит от цвета надписи.
+      const r = s * 0.42;
+      g.fillStyle(0xffd24a, 1);
+      g.fillCircle(x, y, r);
+      g.lineStyle(Math.max(3, s * 0.07), 0xa8680f, 1);
+      g.strokeCircle(x, y, r);
+      g.fillStyle(0xeea52b, 1);
+      g.fillRoundedRect(x - r * 0.4, y - r * 0.4, r * 0.8, r * 0.8, r * 0.18);
+      g.fillStyle(0xfff4b8, 1);
+      g.fillRoundedRect(x - r * 0.3, y - r * 0.36, r * 0.6, r * 0.46, r * 0.12);
       return;
     }
   }

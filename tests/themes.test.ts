@@ -45,6 +45,17 @@ describe('данные миров', () => {
         }
       });
 
+      it('у каждой формы короткая подпись для альбома на обоих языках', () => {
+        for (const lang of ['ru', 'en'] as const) {
+          theme.forms.forEach((form) => {
+            const caption = form.caption[lang].trim();
+            expect(caption, `${theme.id}/${form.tier}/${lang}`).not.toBe('');
+            // Одна строка в клетке альбома.
+            expect(caption.length, caption).toBeLessThanOrEqual(22);
+          });
+        }
+      });
+
       it('надписи заданы, цвета корректные', () => {
         theme.forms.forEach((form) => {
           if (form.label.kind === 'text') {

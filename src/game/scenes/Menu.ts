@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import { albumProgress } from '../../core/meta/album';
 import { applyRunOutcome } from '../../core/meta/progress';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
+import { WORLD_SIZES } from '../../themes';
 import { Button } from '../ui/Button';
 import { COLORS } from '../ui/theme';
 import { BaseScene } from './BaseScene';
@@ -67,6 +69,9 @@ export class MenuScene extends BaseScene {
           onClick: () => this.scene.start(item.scene),
         }),
     );
+    // Процент коллекции виден прямо на кнопке «Альбом» (диздок, раздел 6).
+    const album = albumProgress(this.ctx.save.data.album, WORLD_SIZES);
+    this.items.find((item) => item.id === 'menu.album')?.setBadge(`${album.percent}%`);
     this.resume = null;
     this.onKeyAction((action) => {
       if (this.resume) {

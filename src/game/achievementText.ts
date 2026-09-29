@@ -12,6 +12,23 @@ const TITLES: Readonly<Record<string, TranslationKey>> = {
   secret_word: 'ach.secret_word',
 };
 
+const HINTS: Readonly<Record<string, TranslationKey>> = {
+  first_clack: 'ach.first_clack.hint',
+  caps: 'ach.caps.hint',
+  spacebar: 'ach.spacebar.hint',
+  mega: 'ach.mega.hint',
+  golden_rush: 'ach.golden_rush.hint',
+  pianist: 'ach.pianist.hint',
+  secret_word: 'ach.secret_word.hint',
+};
+
+/** Что сделать, чтобы получить достижение. */
+export function achievementHint(def: AchievementDef, t: Translate): string {
+  if (def.world !== undefined) return t('ach.collector.hint');
+  const key = HINTS[def.id];
+  return key ? t(key) : '';
+}
+
 /** Название достижения на языке игрока. У «Коллекционера» в названии — имя мира. */
 export function achievementTitle(def: AchievementDef, t: Translate, lang: Lang): string {
   if (def.world !== undefined) {

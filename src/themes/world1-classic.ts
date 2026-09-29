@@ -16,6 +16,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 1,
       name: { ru: 'Точка', en: 'Dot' },
+      caption: { ru: 'Маленькая, но важная', en: 'Tiny but mighty' },
       label: { kind: 'text', text: '.' },
       size: { w: 1, h: 1 },
       paint: { kind: 'solid', color: '#9ff0cf' },
@@ -25,6 +26,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 2,
       name: { ru: 'Запятулька', en: 'Comma' },
+      caption: { ru: 'Любит паузы, хитрюга', en: 'Loves a little pause' },
       label: { kind: 'text', text: ',' },
       size: { w: 1.2, h: 1.2 },
       paint: { kind: 'solid', color: '#fff08a' },
@@ -34,6 +36,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 3,
       name: { ru: 'Буквуля', en: 'Letter' },
+      caption: { ru: 'Знает весь алфавит', en: 'Knows the alphabet' },
       label: { kind: 'text', text: { ru: 'Ы', en: 'A' } },
       size: { w: 1.45, h: 1.45 },
       paint: { kind: 'solid', color: '#ffc49b' },
@@ -43,6 +46,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 4,
       name: { ru: 'Циферка', en: 'Number' },
+      caption: { ru: 'Считает до семи', en: 'Counts to seven' },
       label: { kind: 'text', text: '7' },
       size: { w: 1.7, h: 1.7 },
       paint: { kind: 'solid', color: '#8fd3ff' },
@@ -52,6 +56,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 5,
       name: { ru: 'Стрелочка', en: 'Arrow' },
+      caption: { ru: 'Всегда смотрит вверх', en: 'Always looks up' },
       label: { kind: 'text', text: '↑' },
       size: { w: 2, h: 2 },
       paint: { kind: 'solid', color: '#c8f27a' },
@@ -61,6 +66,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 6,
       name: { ru: 'Таб', en: 'Tab' },
+      caption: { ru: 'Спит на ходу', en: 'Naps on the go' },
       label: { kind: 'text', text: 'Tab' },
       size: { w: 2.4, h: 2 },
       paint: { kind: 'solid', color: '#d7b8ff' },
@@ -70,6 +76,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 7,
       name: { ru: 'Капс', en: 'Caps' },
+      caption: { ru: 'ГОВОРИТ ГРОМКО', en: 'TALKS VERY LOUD' },
       label: { kind: 'text', text: 'CAPS' },
       size: { w: 2.8, h: 2.1 },
       paint: { kind: 'solid', color: '#ffa8d2' },
@@ -79,6 +86,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 8,
       name: { ru: 'Шифт', en: 'Shift' },
+      caption: { ru: 'Скромный помощник', en: 'Shy little helper' },
       label: { kind: 'text', text: 'Shift' },
       size: { w: 3.2, h: 2.2 },
       paint: { kind: 'solid', color: '#ff8f84' },
@@ -88,6 +96,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 9,
       name: { ru: 'Энтер', en: 'Enter' },
+      caption: { ru: 'Умник в очках', en: 'Smart in glasses' },
       label: { kind: 'text', text: 'Enter' },
       size: { w: 3.4, h: 2.6 },
       paint: { kind: 'solid', color: '#3fd49b' },
@@ -97,6 +106,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 10,
       name: { ru: 'Бэкспейс', en: 'Backspace' },
+      caption: { ru: 'Стирает и хихикает', en: 'Erases and giggles' },
       label: { kind: 'glyph', glyph: 'backspace' },
       size: { w: 3.8, h: 2.6 },
       paint: { kind: 'solid', color: '#9d85ff' },
@@ -106,6 +116,7 @@ export const WORLD1_CLASSIC: ThemeData = {
     {
       tier: 11,
       name: { ru: 'ПРОБЕЛ', en: 'SPACEBAR' },
+      caption: { ru: 'Король клавиатуры', en: 'King of the keyboard' },
       label: { kind: 'glyph', glyph: 'crown' },
       size: { w: 6, h: 2.4 },
       paint: {
