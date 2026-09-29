@@ -1,5 +1,5 @@
 import { GOLDEN, JAR, UPGRADES } from '../../config/balance';
-import type { Save, UpgradeId } from '../save/schema';
+import type { DeepReadonly, Save, UpgradeId } from '../save/schema';
 
 /** Цена следующего уровня апгрейда или null, если уровень уже максимальный. */
 export function upgradePrice(id: UpgradeId, level: number): number | null {
@@ -8,7 +8,7 @@ export function upgradePrice(id: UpgradeId, level: number): number | null {
   return Math.round(upgrade.basePrice * UPGRADES.priceGrowth ** level);
 }
 
-export function canBuyUpgrade(save: Readonly<Save>, id: UpgradeId): boolean {
+export function canBuyUpgrade(save: DeepReadonly<Save>, id: UpgradeId): boolean {
   const price = upgradePrice(id, save.upgrades[id]);
   return price !== null && save.coins >= price;
 }

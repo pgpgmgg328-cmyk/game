@@ -35,5 +35,22 @@
   "result.newRecord": "Новый рекорд!",
   "result.bestKey": "Самая большая клавиша",
   "result.again": "Ещё раз",
-  "result.menu": "В меню"
+  "result.menu": "В меню",
+  "game.shake": "Встряска",
+  "game.remove": "Удаление",
+  "game.removeHint": "Нажми на клавишу — она исчезнет",
+  "game.newForm": "НОВАЯ ФОРМА!",
+  "game.legendary": "ЛЕГЕНДАРНАЯ ФОРМА!",
+  "game.newSticker": "Новая!",
+  "game.goldenForm": "Золотая форма!",
+  "game.achievement": "Достижение!",
+  "game.tapToContinue": "Нажми, чтобы продолжить",
+  "ach.first_clack": "Первый клац",
+  "ach.caps": "Капсом!",
+  "ach.spacebar": "Пробел!",
+  "ach.mega": "Мега-клац",
+  "ach.golden_rush": "Золотая лихорадка",
+  "ach.collector": "Коллекционер: {world}",
+  "ach.pianist": "Пианист",
+  "ach.secret_word": "Тайное слово"
 }

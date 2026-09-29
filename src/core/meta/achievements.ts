@@ -1,5 +1,5 @@
 import { ACHIEVEMENTS } from '../../config/balance';
-import type { Save } from '../save/schema';
+import type { DeepReadonly, Save } from '../save/schema';
 
 /** Сколько всего сделано за текущий забег (ещё не попало в статистику сохранения). */
 export interface RunProgress {
@@ -57,7 +57,7 @@ export function achievementList(worlds: readonly CollectorWorld[]): AchievementD
  * Секретные сюда не входят — их выдаёт сама пасхалка.
  */
 export function earnedAchievements(
-  save: Readonly<Save>,
+  save: DeepReadonly<Save>,
   worlds: readonly CollectorWorld[],
   run: RunProgress = NO_RUN_PROGRESS,
 ): string[] {

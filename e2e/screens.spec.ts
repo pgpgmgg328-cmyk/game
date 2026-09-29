@@ -4,8 +4,10 @@ import {
   expectButtonsFit,
   expectNoPageScroll,
   openGame,
+  patchSave,
   press,
   screenshot,
+  VETERAN_SAVE,
   waitScene,
   watchConsole,
 } from './helpers';
@@ -33,20 +35,27 @@ const SIZES: ScreenSize[] = [
   { width: 1536, height: 1080, mobile: false, allScreens: false },
 ];
 
-/** Клавиши всех 11 форм: банка на скриншоте выглядит как посреди забега. */
-const JAR_SAMPLE: [tier: number, x: number, y: number][] = [
-  [9, 120, 720],
-  [10, 420, 720],
-  [7, 90, 590],
-  [8, 300, 600],
-  [6, 500, 590],
-  [5, 60, 470],
-  [4, 200, 480],
-  [3, 330, 470],
-  [2, 450, 470],
-  [1, 540, 470],
-  [11, 300, 340],
+/** Клавиши всех 11 форм, две из них золотые: банка на скриншоте выглядит как посреди забега. */
+const JAR_SAMPLE: [tier: number, x: number, y: number, golden: boolean][] = [
+  [9, 120, 720, false],
+  [10, 420, 720, true],
+  [7, 90, 590, false],
+  [8, 300, 600, false],
+  [6, 500, 590, false],
+  [5, 60, 470, false],
+  [4, 200, 480, true],
+  [3, 330, 470, false],
+  [2, 450, 470, false],
+  [1, 540, 470, false],
+  [11, 300, 340, false],
 ];
+
+/** Игрок с апгрейдами: на экране забега видны «Встряска», «Удаление» и второе «Далее». */
+const UPGRADED_SAVE = {
+  ...VETERAN_SAVE,
+  coins: 2500,
+  upgrades: { shake: 2, remove: 1, preview: 1, squish: 1, golden: 1, jar: 0 },
+};
 
 for (const size of SIZES) {
   const name = `${size.width}x${size.height}`;
@@ -76,9 +85,12 @@ for (const size of SIZES) {
       test.setTimeout(150_000);
       const problems = watchConsole(page);
       await openGame(page, { lang: 'ru', seed: '7' });
+      await patchSave(page, UPGRADED_SAVE);
       await press(page, 'menu.play', size.mobile);
       await waitScene(page, 'Game');
-      for (const [tier, x, y] of JAR_SAMPLE) await e2eCall(page, 'placeKey', tier, x, y);
+      for (const [tier, x, y, golden] of JAR_SAMPLE) {
+        await e2eCall(page, 'placeKey', tier, x, y, golden);
+      }
       await e2eCall(page, 'setCurrent', 3);
       await e2eCall(page, 'step', 240);
       await e2eCall(page, 'freeze', true);

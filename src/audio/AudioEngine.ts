@@ -4,12 +4,18 @@ import type { SoundData } from '../themes';
 import { mixState, VoiceLimiter, type MixInput } from './mix';
 import { MusicLoop } from './music';
 import {
+  playAchievement,
+  playCoin,
   playDrop,
   playForm,
   playGameOver,
   playLand,
+  playLegendary,
   playMega,
+  playNewForm,
+  playPoof,
   playRecord,
+  playShake,
   playSquish,
   playTick,
   playUi,
@@ -123,6 +129,30 @@ export class AudioEngine {
 
   tick(): void {
     this.play(false, 0.03, playTick);
+  }
+
+  coin(): void {
+    this.play(false, 0.15, playCoin);
+  }
+
+  shake(): void {
+    this.play(true, 0.45, playShake);
+  }
+
+  poof(): void {
+    this.play(true, 0.25, playPoof);
+  }
+
+  newForm(): void {
+    this.play(true, 0.6, playNewForm);
+  }
+
+  legendary(): void {
+    this.play(true, 2, playLegendary);
+  }
+
+  achievement(): void {
+    this.play(true, 0.65, playAchievement);
   }
 
   // ── Внутреннее ───────────────────────────────────────────────────────────────────────

@@ -2,9 +2,9 @@ import type { BrowStyle, EyeStyle, FaceData, MouthStyle } from '../../themes';
 import { starPath } from './canvas';
 import type { Box, KeycapGeometry } from './keycapArt';
 
-/** Кадры лица: обычное, моргание, «сплющилось» от тапа. */
-export type FaceFrame = 'open' | 'blink' | 'squish';
-export const FACE_FRAMES: readonly FaceFrame[] = ['open', 'blink', 'squish'];
+/** Кадры лица: обычное, моргание, «сплющилось» от тапа, радость (все радуются Пробелу). */
+export type FaceFrame = 'open' | 'blink' | 'squish' | 'joy';
+export const FACE_FRAMES: readonly FaceFrame[] = ['open', 'blink', 'squish', 'joy'];
 
 /** Где на клавише лицо и какого оно размера (в единицах физики). */
 export interface FaceLayout {
@@ -98,23 +98,34 @@ export function drawFace(
   ctx.lineJoin = 'round';
   const extras = face.extras ?? [];
 
-  if (face.blush || frame === 'squish') drawBlush(pen);
+  if (face.blush || frame === 'squish' || frame === 'joy') drawBlush(pen);
   const eyeY = -size * 0.1;
   const eyeX = size * 0.26;
   for (const side of [-1, 1] as const) {
     drawEye(pen, eyeFor(face.eyes, side, frame), side * eyeX, eyeY, side);
-    if (frame !== 'squish') drawBrow(pen, face.brows, side * eyeX, eyeY - size * 0.21, side);
+    if (frame === 'open' || frame === 'blink') {
+      drawBrow(pen, face.brows, side * eyeX, eyeY - size * 0.21, side);
+    }
   }
   if (extras.includes('glasses')) drawGlasses(pen, eyeX, eyeY);
-  drawMouth(pen, frame === 'squish' ? 'o' : face.mouth, extras.includes('tongue'));
-  if (extras.includes('zzz') && frame !== 'squish') drawZzz(pen);
+  drawMouth(pen, mouthFor(face.mouth, frame), extras.includes('tongue'));
+  if (extras.includes('zzz') && (frame === 'open' || frame === 'blink')) drawZzz(pen);
   if (extras.includes('sparkles')) drawSparkles(pen);
 }
 
 type EyeShape = EyeStyle | 'closed' | 'squeezed';
+/** Рот радости: открытая улыбка чуть меньше, чем grin, чтобы не вылезать за лицо. */
+type MouthShape = MouthStyle | 'joy';
+
+function mouthFor(style: MouthStyle, frame: FaceFrame): MouthShape {
+  if (frame === 'squish') return 'o';
+  if (frame === 'joy') return style === 'grin' || style === 'shout' ? 'grin' : 'joy';
+  return style;
+}
 
 function eyeFor(style: EyeStyle, side: -1 | 1, frame: FaceFrame): EyeShape {
   if (frame === 'squish') return 'squeezed';
+  if (frame === 'joy') return 'happy';
   if (frame === 'blink') return style === 'happy' ? 'happy' : 'closed';
   if (style === 'wink') return side === 1 ? 'happy' : 'round';
   return style;
@@ -253,7 +264,7 @@ function drawBrow(pen: Pen, style: BrowStyle, x: number, y: number, side: -1 | 1
   ctx.stroke();
 }
 
-function drawMouth(pen: Pen, style: MouthStyle, tongue: boolean): void {
+function drawMouth(pen: Pen, style: MouthShape, tongue: boolean): void {
   const { ctx, s, color } = pen;
   const y = s * 0.17;
   ctx.fillStyle = color;
@@ -271,11 +282,12 @@ function drawMouth(pen: Pen, style: MouthStyle, tongue: boolean): void {
       ctx.stroke();
       break;
     case 'grin':
+    case 'joy':
     case 'shout': {
-      const w = style === 'grin' ? s * 0.15 : s * 0.12;
-      const depth = style === 'grin' ? s * 0.24 : s * 0.32;
+      const w = style === 'shout' ? s * 0.12 : style === 'joy' ? s * 0.13 : s * 0.15;
+      const depth = style === 'shout' ? s * 0.32 : style === 'joy' ? s * 0.17 : s * 0.24;
       ctx.beginPath();
-      if (style === 'grin') {
+      if (style !== 'shout') {
         ctx.moveTo(-w, y - s * 0.03);
         ctx.lineTo(w, y - s * 0.03);
         ctx.quadraticCurveTo(0, y - s * 0.03 + depth, -w, y - s * 0.03);
@@ -287,7 +299,7 @@ function drawMouth(pen: Pen, style: MouthStyle, tongue: boolean): void {
       ctx.save();
       ctx.clip();
       ctx.fillStyle = TONGUE;
-      ellipse(ctx, 0, y + depth * (style === 'grin' ? 0.42 : 0.55), w * 0.62, depth * 0.24);
+      ellipse(ctx, 0, y + depth * (style === 'shout' ? 0.55 : 0.42), w * 0.62, depth * 0.24);
       ctx.fill();
       ctx.restore();
       break;

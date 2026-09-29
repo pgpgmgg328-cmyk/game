@@ -228,3 +228,109 @@ export function playRecord(voice: Voice): number {
 export function playTick(voice: Voice): number {
   return tone(voice.ctx, voice.out, { freq: 1600, decay: 0.025, gain: 0.05 });
 }
+
+/** Монетка долетела до счётчика: короткое звонкое «дзынь». */
+export function playCoin(voice: Voice): number {
+  tone(voice.ctx, voice.out, {
+    type: 'square',
+    freq: 1976,
+    decay: 0.04,
+    gain: 0.04,
+    lowpass: 5000,
+  });
+  return tone(voice.ctx, voice.out, {
+    type: 'square',
+    freq: 2637,
+    decay: 0.1,
+    gain: 0.04,
+    delay: 0.045,
+    lowpass: 5000,
+  });
+}
+
+/** «Встряска»: мягкий гул банки и дребезг клавиш. */
+export function playShake(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'lowpass',
+    freq: 380,
+    attack: 0.03,
+    decay: 0.35,
+    gain: 0.3,
+  });
+  let length = 0;
+  for (let i = 0; i < 5; i += 1) {
+    length = clack(voice, 330 + i * 45, 0.28, 0.04 + i * 0.065);
+  }
+  return length;
+}
+
+/** «Удаление»: клавиша исчезает с мягким «пуф». */
+export function playPoof(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'bandpass',
+    freq: 1400,
+    freqEnd: 300,
+    q: 0.8,
+    attack: 0.01,
+    decay: 0.24,
+    gain: 0.32,
+  });
+  return tone(voice.ctx, voice.out, { freq: 620, freqEnd: 200, decay: 0.2, gain: 0.14 });
+}
+
+/** «НОВАЯ ФОРМА!»: восходящее арпеджио с искорками. */
+export function playNewForm(voice: Voice): number {
+  const notes = [523, 659, 784, 1047];
+  let length = 0;
+  notes.forEach((freq, index) => {
+    length = tone(voice.ctx, voice.out, {
+      type: 'triangle',
+      freq,
+      decay: 0.22,
+      gain: 0.22,
+      delay: index * 0.075,
+    });
+  });
+  for (let i = 0; i < 3; i += 1) {
+    tone(voice.ctx, voice.out, {
+      freq: 3136 + i * 400,
+      decay: 0.06,
+      gain: 0.04,
+      delay: 0.3 + i * 0.05,
+    });
+  }
+  return length;
+}
+
+/** «ЛЕГЕНДАРНАЯ ФОРМА!»: большие фанфары и мерцание. */
+export function playLegendary(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'highpass',
+    freq: 5000,
+    attack: 0.2,
+    decay: 1.4,
+    gain: 0.1,
+  });
+  fanfare(voice, 196, 1);
+  return tone(voice.ctx, voice.out, {
+    type: 'triangle',
+    freq: 784,
+    attack: 0.05,
+    decay: 1.2,
+    gain: 0.14,
+    delay: 0.75,
+    vibrato: { rate: 6, depth: 0.01 },
+  });
+}
+
+/** Достижение: колокольчик из двух нот. */
+export function playAchievement(voice: Voice): number {
+  tone(voice.ctx, voice.out, { type: 'triangle', freq: 880, decay: 0.35, gain: 0.2 });
+  return tone(voice.ctx, voice.out, {
+    type: 'triangle',
+    freq: 1319,
+    decay: 0.5,
+    gain: 0.2,
+    delay: 0.12,
+  });
+}

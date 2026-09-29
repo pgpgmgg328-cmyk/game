@@ -9,6 +9,12 @@ export const THEMES: readonly ThemeData[] = [WORLD1_CLASSIC];
 
 export const DEFAULT_THEME_ID = WORLD1_CLASSIC.id;
 
+/** Миры для альбома и «Коллекционера мира»: id и число форм. */
+export const WORLD_SIZES: readonly { id: string; forms: number }[] = THEMES.map((theme) => ({
+  id: theme.id,
+  forms: theme.forms.length,
+}));
+
 export function getTheme(id: string): ThemeData | null {
   return THEMES.find((theme) => theme.id === id) ?? null;
 }

@@ -6,10 +6,12 @@ import {
   expectNoPageScroll,
   getButton,
   openGame,
+  patchSave,
   press,
   runState,
   tapJar,
   waitCanDrop,
+  VETERAN_SAVE,
   waitScene,
   watchConsole,
 } from './helpers';
@@ -17,8 +19,10 @@ import {
 /** Высота банки и линия опасности в единицах физики (config/balance.ts). */
 const JAR_HEIGHT = 800;
 
+/** Забег «опытного игрока»: всё открыто, поэтому показы новых форм не останавливают физику. */
 async function startRun(page: Page, touch = false, seed = '5'): Promise<void> {
   await openGame(page, { lang: 'ru', seed });
+  await patchSave(page, VETERAN_SAVE);
   await press(page, 'menu.play', touch);
   await waitScene(page, 'Game');
   await waitCanDrop(page);
@@ -140,7 +144,7 @@ test.describe('забег (мышь, десктоп)', () => {
     const { score } = await runState(page);
     expect(score).toBeGreaterThanOrEqual(20);
     await waitScene(page, 'Result', 45_000);
-    expect(await e2eCall(page, 'stats')).toEqual({ bestScore: score, runs: 1 });
+    expect(await e2eCall(page, 'stats')).toMatchObject({ bestScore: score, runs: 1 });
     // Снимок забега больше не нужен: после перезагрузки «Продолжить?» не спросят.
     expect(await e2eCall(page, 'savedRun')).toBeNull();
     await expectButtonsFit(page);

@@ -1,7 +1,7 @@
 import { PHYSICS } from '../../config/balance';
 import type { KeyGlyph, KeyPaint } from '../../themes';
 import { FONT_FAMILY } from '../fonts';
-import { roundRectPath } from './canvas';
+import { roundRectPath, starPath } from './canvas';
 import { css, darken, lighten, type Rgb } from './color';
 
 /** Прямоугольник относительно левого верхнего угла клавиши, в единицах физики. */
@@ -77,10 +77,19 @@ export interface KeyColors {
   label: Rgb;
 }
 
-export function keyColors(paint: KeyPaint): KeyColors {
+/** Золото золотых клавиш: корпус, обводка и цвет искр. */
+export const GOLD = {
+  light: '#fff4b8',
+  base: '#ffd24a',
+  deep: '#eea52b',
+  outline: '#a8680f',
+  ring: '#ffe98f',
+} as const;
+
+export function keyColors(paint: KeyPaint, golden = false): KeyColors {
   const base = paint.kind === 'solid' ? paint.color : (paint.colors[3] ?? '#ffffff');
   return {
-    base,
+    base: golden ? GOLD.base : base,
     side: darken(base, 0.28),
     outline: darken(base, 0.55),
     label: darken(base, 0.62),
@@ -101,30 +110,45 @@ function paintGradient(
   return gradient;
 }
 
+/** Золотой корпус: блестящий перелив по диагонали. */
+function goldGradient(ctx: CanvasRenderingContext2D, box: Box): CanvasGradient {
+  const gradient = ctx.createLinearGradient(box.x, box.y, box.x + box.w, box.y + box.h);
+  gradient.addColorStop(0, GOLD.light);
+  gradient.addColorStop(0.3, GOLD.base);
+  gradient.addColorStop(0.62, GOLD.deep);
+  gradient.addColorStop(0.82, GOLD.base);
+  gradient.addColorStop(1, GOLD.light);
+  return gradient;
+}
+
 /**
  * Рисует колпачок клавиши в ctx, начало координат — левый верхний угол корпуса,
  * единицы — единицы физики (масштаб выставляет вызывающий код).
+ * У золотой клавиши золотой корпус и рамка, а верхняя грань своего цвета: форму легко узнать.
  */
 export function drawKeycap(
   ctx: CanvasRenderingContext2D,
   geometry: KeycapGeometry,
   paint: KeyPaint,
   label: LabelArt,
+  golden = false,
 ): void {
   const { body, top } = geometry;
   const colors = keyColors(paint);
 
   // Корпус и боковая грань.
   roundRectPath(ctx, body.x, body.y, body.w, body.h, body.r);
-  ctx.fillStyle = paintGradient(ctx, paint, body, (hex) => darken(hex, 0.28));
+  ctx.fillStyle = golden
+    ? goldGradient(ctx, body)
+    : paintGradient(ctx, paint, body, (hex) => darken(hex, 0.28));
   ctx.fill();
   const lipShade = ctx.createLinearGradient(0, top.y + top.h * 0.6, 0, body.h);
   lipShade.addColorStop(0, 'rgba(40, 20, 70, 0)');
   lipShade.addColorStop(1, 'rgba(40, 20, 70, 0.22)');
   ctx.fillStyle = lipShade;
   ctx.fill();
-  ctx.lineWidth = 2.4;
-  ctx.strokeStyle = css(colors.outline, 0.9);
+  ctx.lineWidth = golden ? 2.8 : 2.4;
+  ctx.strokeStyle = golden ? GOLD.outline : css(colors.outline, 0.9);
   ctx.stroke();
 
   // Верхняя грань: светлее сверху, с мягким градиентом.
@@ -155,6 +179,27 @@ export function drawKeycap(
   ctx.fill();
 
   drawLabel(ctx, geometry, colors.label, label);
+  if (golden) drawGoldTrim(ctx, geometry);
+}
+
+/** Золотая рамка вокруг верхней грани и пара искорок на углах. */
+function drawGoldTrim(ctx: CanvasRenderingContext2D, geometry: KeycapGeometry): void {
+  const { top, body } = geometry;
+  const minSide = Math.min(body.w, body.h);
+  roundRectPath(ctx, top.x, top.y, top.w, top.h, top.r);
+  ctx.lineWidth = Math.max(2.2, minSide * 0.05);
+  ctx.strokeStyle = GOLD.ring;
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = GOLD.outline;
+  ctx.stroke();
+
+  const spark = Math.max(4, minSide * 0.1);
+  ctx.fillStyle = '#ffffff';
+  starPath(ctx, top.x + top.w - spark * 0.9, top.y + spark * 0.9, spark, 4, 0.3);
+  ctx.fill();
+  starPath(ctx, body.x + spark * 0.9, body.h - spark * 0.8, spark * 0.7, 4, 0.3);
+  ctx.fill();
 }
 
 function drawLabel(

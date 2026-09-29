@@ -144,15 +144,46 @@ export async function screenshot(page: Page, name: string): Promise<void> {
 }
 
 export interface E2eRunState {
-  keys: { id: number; tier: number; x: number; y: number }[];
+  keys: { id: number; tier: number; golden: boolean; x: number; y: number }[];
   score: number;
   over: boolean;
   ending: boolean;
   current: number;
+  currentGolden: boolean;
   upcoming: number[];
   canDrop: boolean;
   danger: boolean;
   aimX: number;
+  jarWidth: number;
+  coins: number;
+  shownCoins: number;
+  charges: { shakes: number; removes: number };
+  removeMode: boolean;
+  reveal: 'form' | 'legendary' | null;
+  revealMs: number;
+  toasts: number;
+  stickers: number;
+}
+
+const ALL_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+/**
+ * Игрок, который уже всё открыл и прошёл обучение: в забеге нет показов новых форм,
+ * наклеек и плашек достижений. Для проверок, которые не про мету.
+ */
+export const VETERAN_SAVE = {
+  album: { classic: { forms: ALL_TIERS, golden: ALL_TIERS } },
+  achievements: ['first_clack', 'caps', 'spacebar', 'mega', 'golden_rush', 'collector_classic'],
+  tutorial: { done: true, squish: true },
+};
+
+/** Подменить части сохранения (хук patchSave; данные проходят обычную проверку сохранения). */
+export async function patchSave(page: Page, patch: Record<string, unknown>): Promise<void> {
+  await page.evaluate(
+    (data) =>
+      (window as unknown as { __e2e: { patchSave(p: unknown): void } }).__e2e.patchSave(data),
+    patch,
+  );
 }
 
 /** Вызов хука window.__e2e[name](...args). */
@@ -174,6 +205,23 @@ export async function runState(page: Page): Promise<E2eRunState> {
   const state = await e2eCall<E2eRunState | null>(page, 'run');
   if (!state) throw new Error('Экран забега не открыт');
   return state;
+}
+
+/** Ждёт состояния забега, для которого check вернёт true; возвращает это состояние. */
+export async function waitRun(
+  page: Page,
+  check: (state: E2eRunState) => boolean,
+  timeout = 30_000,
+): Promise<E2eRunState> {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const state = await runState(page);
+    if (check(state)) return state;
+    if (Date.now() > deadline) {
+      throw new Error(`Не дождались состояния забега: ${JSON.stringify(state).slice(0, 400)}`);
+    }
+    await page.waitForTimeout(40);
+  }
 }
 
 /** Ждёт, пока висящую клавишу можно сбросить (игровое время без видеокарты идёт медленнее). */

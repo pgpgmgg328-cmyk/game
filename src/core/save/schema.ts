@@ -68,6 +68,9 @@ export type Save = SaveV3;
 
 export type JsonObject = Record<string, unknown>;
 
+/** Только для чтения на всю глубину: так экраны читают сохранение, не меняя его в обход update. */
+export type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
+
 export function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

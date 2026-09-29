@@ -35,5 +35,22 @@
   "result.newRecord": "New record!",
   "result.bestKey": "Biggest key",
   "result.again": "Play again",
-  "result.menu": "Menu"
+  "result.menu": "Menu",
+  "game.shake": "Shake",
+  "game.remove": "Remove",
+  "game.removeHint": "Tap a key to remove it",
+  "game.newForm": "NEW FORM!",
+  "game.legendary": "LEGENDARY FORM!",
+  "game.newSticker": "New!",
+  "game.goldenForm": "Golden form!",
+  "game.achievement": "Achievement!",
+  "game.tapToContinue": "Tap to continue",
+  "ach.first_clack": "First Clack",
+  "ach.caps": "ALL CAPS!",
+  "ach.spacebar": "Spacebar!",
+  "ach.mega": "Mega Clack",
+  "ach.golden_rush": "Gold Rush",
+  "ach.collector": "Collector: {world}",
+  "ach.pianist": "Pianist",
+  "ach.secret_word": "Secret Word"
 }

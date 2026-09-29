@@ -20,6 +20,7 @@ export class Particles {
   private readonly stars: Emitter;
   private readonly hearts: Emitter;
   private readonly sparkles: Emitter;
+  private readonly puffs: Emitter;
   private readonly popups: Phaser.GameObjects.Text[] = [];
   private nextPopup = 0;
 
@@ -60,6 +61,13 @@ export class Particles {
       speed: { min: 20, max: 90 },
       angle: { min: 0, max: 360 },
       scale: { start: 0.45, end: 0 },
+    });
+    this.puffs = emitter(FX.dot, {
+      lifespan: { min: 380, max: 650 },
+      speed: { min: 40 * travel, max: 150 * travel },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.9, end: 0.2 },
+      alpha: { start: 0.85, end: 0 },
     });
 
     for (let i = 0; i < POPUP_POOL; i += 1) {
@@ -106,6 +114,16 @@ export class Particles {
     this.popup(x, y, `${label}\n+${score}`, 56);
   }
 
+  /** Радужный фейерверк без надписи (легендарная форма). */
+  fireworks(x: number, y: number): void {
+    RAINBOW.forEach((color, index) => {
+      this.stars.setParticleTint(color);
+      this.stars.explode(this.reducedMotion ? 3 : 6, x + (index - 2.5) * 18, y);
+    });
+    this.sparkles.setParticleTint(0xffffff);
+    this.sparkles.explode(10, x, y);
+  }
+
   /** Праздничный салют без надписи (например, «Новый рекорд!»). */
   celebrate(x: number, y: number): void {
     [0xffd65c, 0xff9aa2, 0x8fd3ff].forEach((color) => {
@@ -114,6 +132,14 @@ export class Particles {
     });
     this.sparkles.setParticleTint(0xffffff);
     this.sparkles.explode(10, x, y);
+  }
+
+  /** «Удаление»: клавиша исчезает облачком своего цвета. */
+  poof(x: number, y: number, color: number): void {
+    this.puffs.setParticleTint(0xffffff);
+    this.puffs.explode(this.reducedMotion ? 5 : 10, x, y);
+    this.stars.setParticleTint(color);
+    this.stars.explode(this.reducedMotion ? 4 : 8, x, y);
   }
 
   /** Тап-сквиш: пара искорок. */

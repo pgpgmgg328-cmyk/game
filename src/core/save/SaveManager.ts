@@ -1,5 +1,5 @@
 import type { RestoredSave } from './restore';
-import type { Save } from './schema';
+import type { DeepReadonly, Save } from './schema';
 
 /** normal — обычное изменение; urgent — отправить в облако сразу (конец забега, покупка, пауза). */
 export type SaveUrgency = 'normal' | 'urgent';
@@ -10,8 +10,6 @@ export interface SaveBackend {
   /** Немедленно отправить отложенные записи. */
   flush(): void;
 }
-
-type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
 
 export class SaveManager {
   private current: Save;

@@ -1,27 +1,50 @@
 import Phaser from 'phaser';
-import { DROP, JAR, RUN, SQUISH } from '../../config/balance';
+import { DROP, JAR, NEW_FORM, RUN, SQUISH } from '../../config/balance';
 import { actionForKey } from '../../core/input';
+import {
+  earnedAchievements,
+  grantAchievements,
+  type AchievementDef,
+} from '../../core/meta/achievements';
+import { discoverForm, isDiscovered } from '../../core/meta/album';
 import { applyRunOutcome, type RunOutcome } from '../../core/meta/progress';
+import { runModifiers } from '../../core/meta/upgrades';
 import type { RunSnapshot } from '../../core/run/snapshot';
-import { formatNumber } from '../../i18n';
-import { DEFAULT_THEME_ID, THEMES, formOf, getTheme, type ThemeData } from '../../themes';
+import {
+  DEFAULT_THEME_ID,
+  THEMES,
+  WORLD_SIZES,
+  formOf,
+  getTheme,
+  maxTier,
+  type ThemeData,
+} from '../../themes';
+import { achievementTitle } from '../achievementText';
 import { hexToNumber } from '../art/color';
-import { ensureFxArt, ensureThemeArt, type KeyArt } from '../art/textures';
+import { ensureFxArt, ensureThemeArt, ensureUiArt, goldenArt, type KeyArt } from '../art/textures';
 import { e2eSeed } from '../e2eParams';
+import { CoinFlights } from '../objects/CoinFlights';
 import { DangerLine } from '../objects/DangerLine';
+import { FormReveal, type RevealKind } from '../objects/FormReveal';
 import { AimGuide, JarView } from '../objects/Jar';
 import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
+import { HUD_SIDE_ROOM, HUD_TOOLS_HEIGHT, HUD_TOP_HEIGHT, RunHud } from '../objects/RunHud';
+import { Toasts } from '../objects/Toasts';
 import { phaserMatter } from '../run/phaserMatter';
 import { Run, type RunEvent, type RunKey } from '../run/Run';
-import { Button } from '../ui/Button';
-import { COLORS } from '../ui/theme';
 import { BaseScene } from './BaseScene';
 import { titleStyle } from './titleStyle';
 
 export interface GameSceneData {
   /** Продолжить сохранённый забег. */
   snapshot?: RunSnapshot;
+}
+
+/** Форма, открытая в забеге. golden — открылась золотая версия. */
+export interface FoundForm {
+  tier: number;
+  golden: boolean;
 }
 
 /** Что показать на экране результата. */
@@ -31,60 +54,78 @@ export interface RunSummary {
   newRecord: boolean;
   bestTier: number;
   world: string;
+  /** Все монеты забега: за слияния и бонус за очки. */
+  coins: number;
+  /** Бонус в конце забега (очки / 100). */
+  bonus: number;
+  /** Формы, открытые в этом забеге. */
+  newForms: FoundForm[];
+  /** Достижения, полученные в этом забеге. */
+  achievements: string[];
 }
 
-const PAUSE_BUTTON_SIZE = 116;
-const NEXT_PANEL_SIZE = 124;
-/** Высота полосы HUD над банкой, когда он сверху. */
-const HUD_HEIGHT = 172;
 /** Самая высокая клавиша, которая может висеть над банкой (тир 5), в единицах физики. */
 const MAX_HANG_HEIGHT = 100;
-/** Область банки на экране в единицах физики: с висящей клавишей сверху и тенью снизу. */
-const VIEW = {
-  left: -JAR.wall - 14,
-  right: JAR.width + JAR.wall + 14,
-  top: -(JAR.hangGap + MAX_HANG_HEIGHT + 26),
-  bottom: JAR.height + JAR.wall + 34,
-};
 /** Сколько длится надпись «Банка переполнена!» перед экраном результата. */
 const OVERFLOW_BANNER_MS = 1700;
 /** Удары о соседей анимируются не чаще, чем раз в столько миллисекунд на клавишу. */
 const IMPACT_COOLDOWN_MS = 140;
+/** Сколько висит наклейка «Новая!» над только что открытой клавишей. */
+const STICKER_MS = 1600;
+/** Сколько клавиши радуются появлению Пробела. */
+const CHEER_MS = 1600;
 
 interface Gesture {
   pointerId: number;
-  kind: 'aim' | 'squish';
+  /** aim — ведём прицел; squish — тапнули клавишу; tool — нажатие ушло на инструмент. */
+  kind: 'aim' | 'squish' | 'tool';
+}
+
+interface Sticker {
+  keyId: number;
+  label: Phaser.GameObjects.Text;
+  until: number;
 }
 
 /**
- * Экран забега: банка с клавишами, прицел, счёт. Физика и правила живут в Run (game/run),
- * сцена рисует их состояние, передаёт ввод и отвечает анимациями.
+ * Экран забега: банка с клавишами, прицел, счёт, монеты и инструменты. Физика и правила живут
+ * в Run (game/run), сцена рисует их состояние, передаёт ввод и отвечает анимациями.
  * Пока экран открыт, забег активен: площадке уходит GameplayAPI.start(), на паузе — stop().
  */
 export class GameScene extends BaseScene {
   private run!: Run;
   private theme!: ThemeData;
   private art: KeyArt[] = [];
+  private goldArt = new Map<number, KeyArt>();
   private jarRoot!: Phaser.GameObjects.Container;
   private keysLayer!: Phaser.GameObjects.Container;
+  private stickerLayer!: Phaser.GameObjects.Container;
   private views = new Map<number, Keycap>();
   private lastImpact = new Map<number, number>();
   private hanging: Keycap | null = null;
-  private preview: Keycap | null = null;
   private danger!: DangerLine;
   private guide!: AimGuide;
   private fx!: Particles;
-  private pauseButton!: Button;
-  private scoreText!: Phaser.GameObjects.Text;
-  private bestText!: Phaser.GameObjects.Text;
-  private nextPanel!: Phaser.GameObjects.Graphics;
-  private nextLabel!: Phaser.GameObjects.Text;
+  private hud!: RunHud;
+  private coinFlights!: CoinFlights;
+  private toasts!: Toasts;
+  private reveal!: FormReveal;
+  private removeHint!: Phaser.GameObjects.Container;
   private banner: Phaser.GameObjects.Container | null = null;
   private gesture: Gesture | null = null;
   private held = new Set<'left' | 'right'>();
+  private stickers: Sticker[] = [];
+  private revealQueue: KeyArt[] = [];
+  private newForms: FoundForm[] = [];
+  private achievements: string[] = [];
   private shownScore = 0;
+  private shownCoins = 0;
   private best = 0;
   private jarScale = 1;
+  private jarBaseX = 0;
+  private shakeOffset = 0;
+  private removeMode = false;
+  private cheerPending = false;
   private ending = false;
   private frozen = false;
   private clock = 0;
@@ -98,19 +139,48 @@ export class GameScene extends BaseScene {
     this.setupScreen();
     this.resetState();
     const { ctx } = this;
+    const save = ctx.save.data;
     this.theme = getTheme(data.snapshot?.world ?? DEFAULT_THEME_ID) ?? THEMES[0]!;
     this.art = ensureThemeArt(this, this.theme, ctx.lang);
     ensureFxArt(this);
-    this.run = new Run(phaserMatter, this.theme, { snapshot: data.snapshot, seed: e2eSeed() });
-    this.best = ctx.save.data.stats.bestScore;
-    this.shownScore = this.run.score;
+    ensureUiArt(this);
+    this.run = new Run(phaserMatter, this.theme, {
+      snapshot: data.snapshot,
+      seed: e2eSeed(),
+      modifiers: runModifiers(save.upgrades),
+    });
+    this.best = save.stats.bestScore;
+    const stats = this.run.getStats();
+    this.shownScore = stats.score;
+    this.shownCoins = stats.coins;
 
     this.buildJar();
-    this.buildHud();
+    const charges = this.run.charges;
+    this.hud = new RunHud(
+      this,
+      ctx.t,
+      ctx.lang,
+      this.run.upcoming.length,
+      {
+        shake: save.upgrades.shake > 0 || charges.shakes > 0,
+        remove: save.upgrades.remove > 0 || charges.removes > 0,
+      },
+      {
+        onPause: () => this.openPause(),
+        onShake: () => this.useShake(),
+        onRemove: () => this.setRemoveMode(!this.removeMode),
+      },
+    );
+    this.hud.setCharges(charges.shakes, charges.removes);
+    this.coinFlights = new CoinFlights(this, ctx.reducedMotion);
+    this.reveal = new FormReveal(this, ctx.reducedMotion);
+    this.toasts = new Toasts(this, ctx.reducedMotion);
+
     for (const key of this.run.keys) this.createView(key);
     this.showHanging(false);
     this.updatePreview();
     this.updateScore(true);
+    this.hud.setCoins(this.shownCoins);
 
     this.addCleanup(this.run.on((event) => this.onRunEvent(event)));
     this.addCleanup(() => this.abandonIfUnfinished());
@@ -126,12 +196,13 @@ export class GameScene extends BaseScene {
 
   override update(time: number, delta: number): void {
     this.clock = time;
-    if (!this.frozen && !this.ending) {
+    const halted = this.halted;
+    if (!halted && !this.ending) {
       const direction = (this.held.has('right') ? 1 : 0) - (this.held.has('left') ? 1 : 0);
       if (direction !== 0) this.run.moveAim((direction * DROP.keyboardSpeed * delta) / 1000);
     }
-    const alpha = this.frozen ? 1 : this.run.update(delta);
-    if (!this.frozen && !this.ending) {
+    const alpha = halted ? 1 : this.run.update(delta);
+    if (!halted && !this.ending) {
       this.snapshotTimer += delta;
       if (this.snapshotTimer >= RUN.snapshotIntervalMs) {
         this.snapshotTimer = 0;
@@ -143,53 +214,74 @@ export class GameScene extends BaseScene {
     this.danger.tick(time, this.run.dangerMs, this.ctx.reducedMotion);
     this.views.forEach((view) => view.tick(delta, time));
     this.hanging?.tick(delta, time);
-    this.preview?.tick(delta, time);
     this.tickScore(delta);
+    this.tickStickers();
+    this.toasts.tick(delta, time);
+    this.reveal.tick(delta, time);
+    this.jarRoot.x = this.jarBaseX + this.shakeOffset;
+    if (this.removeHint.visible && !this.ctx.reducedMotion) {
+      this.removeHint.setAlpha(0.75 + 0.25 * Math.sin(time / 180));
+    }
   }
 
   protected layoutScreen(height: number): void {
     const { layout } = this.ctx;
     const visibleLeft = -layout.column.x / layout.scale;
-    const visibleRight = visibleLeft + layout.canvasWidth / layout.scale;
-    const viewWidth = VIEW.right - VIEW.left;
-    const viewHeight = VIEW.bottom - VIEW.top;
+    const visibleTop = -layout.column.y / layout.scale;
+    const visibleWidth = layout.canvasWidth / layout.scale;
+    const visibleHeight = layout.canvasHeight / layout.scale;
+    const visibleRight = visibleLeft + visibleWidth;
+    const view = this.view();
+    const viewWidth = view.right - view.left;
+    const viewHeight = view.bottom - view.top;
+    const toolsHeight = this.hud.hasTools ? HUD_TOOLS_HEIGHT : 0;
 
     // HUD сверху, а если экран низкий и по бокам много места (телефон лёжа) — по бокам от банки.
-    const topScale = Math.min((720 - 24) / viewWidth, (height - HUD_HEIGHT - 16) / viewHeight);
+    const topScale = Math.min(
+      (720 - 24) / viewWidth,
+      (height - HUD_TOP_HEIGHT - 16 - toolsHeight) / viewHeight,
+    );
     const sideRoom = Math.min(-visibleLeft, visibleRight - 720);
     const sideScale =
-      sideRoom >= 250 ? Math.min((720 - 24) / viewWidth, (height - 32) / viewHeight) : 0;
+      sideRoom >= HUD_SIDE_ROOM ? Math.min((720 - 24) / viewWidth, (height - 32) / viewHeight) : 0;
     const side = sideScale > topScale * 1.1;
     const scale = side ? sideScale : topScale;
     this.jarScale = scale;
 
     const freeHeight = side
       ? height - viewHeight * scale
-      : height - HUD_HEIGHT - 8 - viewHeight * scale;
-    const jarTop = side ? freeHeight / 2 : HUD_HEIGHT + Math.max(0, freeHeight * 0.45);
+      : height - HUD_TOP_HEIGHT - 8 - toolsHeight - viewHeight * scale;
+    const jarTop = side ? freeHeight / 2 : HUD_TOP_HEIGHT + Math.max(0, freeHeight * 0.45);
     this.jarRoot.setScale(scale);
-    this.jarRoot.setPosition(
-      360 - ((VIEW.left + VIEW.right) / 2) * scale,
-      jarTop - VIEW.top * scale,
-    );
+    this.jarBaseX = 360 - ((view.left + view.right) / 2) * scale;
+    this.jarRoot.setPosition(this.jarBaseX + this.shakeOffset, jarTop - view.top * scale);
 
-    const half = NEXT_PANEL_SIZE / 2;
-    if (side) {
-      const hudX = visibleLeft / 2;
-      this.scoreText.setPosition(hudX, height * 0.2);
-      this.bestText.setPosition(hudX, height * 0.2 + 64);
-      this.placeNextPanel(hudX, height * 0.2 + 150 + half);
-      this.pauseButton.setPosition(
-        visibleRight - 24 - PAUSE_BUTTON_SIZE / 2,
-        24 + PAUSE_BUTTON_SIZE / 2,
-      );
-    } else {
-      this.scoreText.setPosition(360, 62);
-      this.bestText.setPosition(360, 124);
-      this.placeNextPanel(24 + half, 24 + half);
-      this.pauseButton.setPosition(720 - 24 - PAUSE_BUTTON_SIZE / 2, 24 + PAUSE_BUTTON_SIZE / 2);
-    }
-    this.banner?.setPosition(JAR.width / 2, JAR.height * 0.38);
+    const jarBottom = jarTop + viewHeight * scale;
+    this.hud.layout(side ? 'side' : 'top', height, visibleLeft, visibleRight, jarBottom);
+    this.banner?.setPosition(this.run.jar.width / 2, JAR.height * 0.38);
+    this.removeHint.setPosition(this.run.jar.width / 2, JAR.height * 0.22);
+    // Лёжа плашки встают в левую панель, чтобы не закрывать висящую клавишу.
+    if (side) this.toasts.setAnchor(visibleLeft / 2, height - 84, -visibleLeft - 32);
+    else this.toasts.setAnchor(360, HUD_TOP_HEIGHT + 64);
+    this.reveal.layout(
+      { x: visibleLeft, y: visibleTop, width: visibleWidth, height: visibleHeight },
+      Math.max(300, Math.min(height - 300, height * 0.46)),
+    );
+  }
+
+  /** Физика стоит: показ новой формы или стоп-кадр автотеста. */
+  private get halted(): boolean {
+    return this.frozen || this.reveal.kind !== null;
+  }
+
+  /** Область банки на экране в единицах физики: с висящей клавишей сверху и тенью снизу. */
+  private view(): { left: number; right: number; top: number; bottom: number } {
+    return {
+      left: -JAR.wall - 14,
+      right: this.run.jar.width + JAR.wall + 14,
+      top: -(JAR.hangGap + MAX_HANG_HEIGHT + 26),
+      bottom: JAR.height + JAR.wall + 34,
+    };
   }
 
   // ── Построение экрана ────────────────────────────────────────────────────────────────
@@ -197,11 +289,18 @@ export class GameScene extends BaseScene {
   private resetState(): void {
     this.views = new Map();
     this.lastImpact = new Map();
+    this.goldArt = new Map();
     this.hanging = null;
-    this.preview = null;
     this.banner = null;
     this.gesture = null;
     this.held = new Set();
+    this.stickers = [];
+    this.revealQueue = [];
+    this.newForms = [];
+    this.achievements = [];
+    this.shakeOffset = 0;
+    this.removeMode = false;
+    this.cheerPending = false;
     this.ending = false;
     this.frozen = false;
     this.snapshotTimer = 0;
@@ -213,6 +312,8 @@ export class GameScene extends BaseScene {
     this.guide = new AimGuide(this, this.theme.palette);
     this.fx = new Particles(this, this.ctx.reducedMotion);
     this.keysLayer = new Phaser.GameObjects.Container(this, 0, 0);
+    this.stickerLayer = new Phaser.GameObjects.Container(this, 0, 0);
+    this.removeHint = this.createRemoveHint();
     this.jarRoot = this.add.container(0, 0, [
       jar.back,
       this.guide.graphics,
@@ -220,60 +321,53 @@ export class GameScene extends BaseScene {
       this.danger.graphics,
       jar.front,
       this.fx.layer,
+      this.stickerLayer,
+      this.removeHint,
     ]);
   }
 
-  private buildHud(): void {
-    const { t } = this.ctx;
-    this.scoreText = this.createText(360, 0, '0', titleStyle(64)).setOrigin(0.5);
-    this.bestText = this.createText(360, 0, '', {
-      fontSize: '30px',
-      fontStyle: '800',
-      color: COLORS.title,
-      stroke: '#ffffff',
-      strokeThickness: 6,
-    }).setOrigin(0.5);
-    this.nextPanel = this.add.graphics();
-    this.nextLabel = this.createText(0, 0, t('game.next'), {
-      fontSize: '22px',
-      fontStyle: '800',
-      color: COLORS.title,
-    }).setOrigin(0.5);
-    this.pauseButton = new Button(this, 0, 0, {
-      id: 'game.pause',
-      icon: 'pause',
-      width: PAUSE_BUTTON_SIZE,
-      height: PAUSE_BUTTON_SIZE,
-      onClick: () => this.openPause(),
-    });
+  /** Подсказка режима «Удаление»: какую клавишу убрать, игрок выбирает тапом. */
+  private createRemoveHint(): Phaser.GameObjects.Container {
+    const label = this.createText(
+      0,
+      0,
+      this.ctx.t('game.removeHint'),
+      { fontSize: '30px', fontStyle: '900', color: '#5a1a33' },
+      false,
+    ).setOrigin(0.5);
+    const width = Math.min(JAR.width - 40, label.width + 56);
+    label.setScale(Math.min(1, (width - 40) / label.width));
+    const height = 72;
+    const panel = new Phaser.GameObjects.Graphics(this);
+    panel.fillStyle(0xffffff, 0.94);
+    panel.fillRoundedRect(-width / 2, -height / 2, width, height, height / 2);
+    panel.lineStyle(4, 0xe0708f, 1);
+    panel.strokeRoundedRect(-width / 2, -height / 2, width, height, height / 2);
+    return new Phaser.GameObjects.Container(this, 0, 0, [panel, label]).setVisible(false);
   }
 
-  private placeNextPanel(x: number, y: number): void {
-    const size = NEXT_PANEL_SIZE;
-    this.nextPanel.clear();
-    this.nextPanel.fillStyle(0xffffff, 0.75);
-    this.nextPanel.fillRoundedRect(x - size / 2, y - size / 2, size, size, 28);
-    this.nextPanel.lineStyle(3, COLORS.keySide, 1);
-    this.nextPanel.strokeRoundedRect(x - size / 2, y - size / 2, size, size, 28);
-    this.nextLabel.setPosition(x, y - size / 2 + 20);
-    this.preview?.setPosition(x, y + 12);
-  }
-
-  private artFor(tier: number): KeyArt {
+  /** Текстура формы: обычная или золотая (золотые рисуются при первой встрече). */
+  private artFor(tier: number, golden = false): KeyArt {
     const art = this.art[tier - 1];
     if (!art) throw new Error(`Нет текстуры для тира ${tier}`);
-    return art;
+    if (!golden) return art;
+    let gold = this.goldArt.get(tier);
+    if (!gold) {
+      gold = goldenArt(this, this.theme, this.ctx.lang, art);
+      this.goldArt.set(tier, gold);
+    }
+    return gold;
   }
 
-  private newKeycap(tier: number): Keycap {
-    return new Keycap(this, this.artFor(tier), {
+  private newKeycap(tier: number, golden: boolean): Keycap {
+    return new Keycap(this, this.artFor(tier, golden), {
       idle: !this.ctx.reducedMotion,
       random: Math.random,
     });
   }
 
   private createView(key: RunKey): Keycap {
-    const view = this.newKeycap(key.tier);
+    const view = this.newKeycap(key.tier, key.golden);
     view.setPosition(key.body.position.x, key.body.position.y);
     view.setRotation(key.body.angle);
     this.keysLayer.add(view);
@@ -298,7 +392,8 @@ export class GameScene extends BaseScene {
 
   private renderHanging(time: number): void {
     const hanging = this.hanging;
-    const ready = hanging !== null && this.run.canDrop && !this.ending;
+    const ready =
+      hanging !== null && this.run.canDrop && !this.ending && !this.removeMode && !this.halted;
     if (hanging) {
       const bob = this.ctx.reducedMotion ? 0 : Math.sin(time / 420) * 3;
       hanging.setPosition(this.run.aimX, this.run.hangY() + bob);
@@ -323,7 +418,8 @@ export class GameScene extends BaseScene {
   /** Висящая клавиша над банкой: появляется с «попом», когда её можно сбросить. */
   private showHanging(animate: boolean): void {
     this.hanging?.destroy();
-    const view = this.newKeycap(this.run.currentTier);
+    const { tier, golden } = this.run.current;
+    const view = this.newKeycap(tier, golden);
     view.setPosition(this.run.aimX, this.run.hangY());
     this.keysLayer.add(view);
     this.hanging = view;
@@ -334,29 +430,14 @@ export class GameScene extends BaseScene {
   }
 
   private updatePreview(): void {
-    this.preview?.destroy();
-    const tier = this.run.upcoming[0]?.tier;
-    if (tier === undefined) {
-      this.preview = null;
-      return;
-    }
-    const art = this.artFor(tier);
-    const view = new Keycap(this, art, { idle: false, random: Math.random });
-    view.baseScale = Math.min(1, 74 / Math.max(art.width, art.height));
-    view.tick(0, 0);
-    this.add.existing(view);
-    this.preview = view;
-    this.layoutScreen(this.screenHeight);
+    this.hud.setPreview(this.run.upcoming.map((item) => this.artFor(item.tier, item.golden)));
   }
 
   private updateScore(immediate: boolean): void {
     if (immediate || this.ctx.reducedMotion) this.shownScore = this.run.score;
-    const { t, lang } = this.ctx;
-    this.scoreText.setText(formatNumber(this.shownScore, lang));
     // Рекорд растёт вместе с «дотикивающим» счётом, а не раньше него.
     const best = Math.max(this.best, this.shownScore);
-    this.bestText.setText(t('game.best', { score: formatNumber(best, lang) }));
-    this.bestText.setColor(this.shownScore > this.best && this.best > 0 ? '#e0457b' : COLORS.title);
+    this.hud.setScore(this.shownScore, best, this.shownScore > this.best && this.best > 0);
   }
 
   /** Счёт «дотикивает» до настоящего за доли секунды. */
@@ -366,6 +447,25 @@ export class GameScene extends BaseScene {
     const step = Math.max(1, Math.ceil((target - this.shownScore) * Math.min(1, delta / 120)));
     this.shownScore = Math.min(target, this.shownScore + step);
     this.updateScore(false);
+  }
+
+  /** Наклейки «Новая!» следуют за своей клавишей и исчезают через пару секунд. */
+  private tickStickers(): void {
+    if (this.stickers.length === 0) return;
+    this.stickers = this.stickers.filter((sticker) => {
+      const view = this.views.get(sticker.keyId);
+      if (!view || this.clock >= sticker.until) {
+        this.tweens.add({
+          targets: sticker.label,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => sticker.label.destroy(),
+        });
+        return false;
+      }
+      sticker.label.setPosition(view.x, view.y - view.art.height / 2 - 26);
+      return true;
+    });
   }
 
   // ── События забега ───────────────────────────────────────────────────────────────────
@@ -379,6 +479,7 @@ export class GameScene extends BaseScene {
         this.hanging?.destroy();
         this.hanging = null;
         this.updatePreview();
+        this.discover(event.key, 'drop');
         break;
       }
       case 'ready':
@@ -406,6 +507,12 @@ export class GameScene extends BaseScene {
         this.fx.squish(event.key.body.position.x, event.key.body.bounds.min.y);
         break;
       }
+      case 'shake':
+        this.onShake();
+        break;
+      case 'remove':
+        this.onRemove(event.key);
+        break;
       case 'danger':
         this.danger.setWarning(event.warning);
         break;
@@ -435,24 +542,233 @@ export class GameScene extends BaseScene {
     }
     const { t } = this.ctx;
     if (event.created) {
-      const view = this.createView(event.created);
+      const created = event.created;
+      const view = this.createView(created);
       if (!this.ctx.reducedMotion) {
         view.pop = 0.55;
         this.tweens.add({ targets: view, pop: 1, duration: 260, ease: 'Back.easeOut' });
       }
       view.squash(-0.35);
-      const tier = event.created.tier;
-      const color = hexToNumber(this.artFor(tier).colors.base);
+      const tier = created.tier;
+      const color = hexToNumber(this.artFor(tier, created.golden).colors.base);
       this.fx.merge(event.x, event.y, color, tier, t('game.clack'), event.score);
-      this.ctx.audio.form(formOf(this.theme, tier).sound, event.combo);
+      const reveal = this.discover(created, 'merge');
+      // Легендарный показ играет свои фанфары: звук формы поверх него не нужен.
+      if (reveal !== 'legendary') this.ctx.audio.form(formOf(this.theme, tier).sound, event.combo);
+      if (tier === maxTier(this.theme)) {
+        // Все клавиши в банке радуются Пробелу — после показа, если он есть.
+        if (reveal) this.cheerPending = true;
+        else this.cheer();
+      }
     } else {
       this.fx.mega(event.x, event.y, t('game.mega'), event.score);
       this.ctx.audio.mega();
     }
+    if (event.coins > 0) {
+      const from = this.jarToScene(event.x, event.y);
+      this.coinFlights.launch(from, this.hud.coinTarget(), event.coins, (value) => {
+        this.shownCoins += value;
+        this.hud.setCoins(this.shownCoins);
+        this.hud.bumpCoins();
+        this.ctx.audio.coin();
+      });
+    }
+    if (!this.ctx.reducedMotion) this.hud.bumpScore();
+    this.checkAchievements();
+  }
+
+  /** «Встряска»: банка качается, клавиши подпрыгивают. */
+  private onShake(): void {
+    const { shakes, removes } = this.run.charges;
+    this.hud.setCharges(shakes, removes);
+    this.ctx.audio.shake();
+    this.views.forEach((view) => view.squash(0.5));
+    if (this.ctx.reducedMotion) return;
+    const wobble = { t: 0 };
+    this.tweens.add({
+      targets: wobble,
+      t: 1,
+      duration: 420,
+      onUpdate: () => {
+        this.shakeOffset = Math.sin(wobble.t * Math.PI * 6) * 14 * (1 - wobble.t);
+      },
+      onComplete: () => {
+        this.shakeOffset = 0;
+      },
+    });
+  }
+
+  /** «Удаление»: клавиша исчезает с «пуф». */
+  private onRemove(key: RunKey): void {
+    const { shakes, removes } = this.run.charges;
+    this.hud.setCharges(shakes, removes);
+    const view = this.views.get(key.id);
+    this.views.delete(key.id);
+    this.lastImpact.delete(key.id);
+    const color = hexToNumber(this.artFor(key.tier, key.golden).colors.base);
+    this.fx.poof(key.body.position.x, key.body.position.y, color);
+    this.ctx.audio.poof();
+    if (!view) return;
+    if (this.ctx.reducedMotion) {
+      view.destroy();
+      return;
+    }
+    this.tweens.add({
+      targets: view,
+      pop: 0,
+      alpha: 0,
+      angle: view.angle + 90,
+      duration: 240,
+      ease: 'Back.easeIn',
+      onComplete: () => view.destroy(),
+    });
+  }
+
+  // ── Инструменты ──────────────────────────────────────────────────────────────────────
+
+  private useShake(): void {
+    if (this.halted || this.ending) return;
+    this.setRemoveMode(false);
+    this.run.shake();
+  }
+
+  /** Режим «Удаление»: следующий тап по клавише убирает её, тап мимо — отменяет режим. */
+  private setRemoveMode(on: boolean): void {
+    const enabled = on && !this.ending && !this.halted && this.run.charges.removes > 0;
+    if (this.removeMode === enabled) return;
+    this.removeMode = enabled;
+    this.hud.setRemoveMode(enabled);
+    this.removeHint.setVisible(enabled).setAlpha(1);
+    if (enabled) this.gesture = null;
+  }
+
+  // ── Альбом, показы и достижения ──────────────────────────────────────────────────────
+
+  /**
+   * Клавиша появилась в банке: если такой формы ещё не было, она попадает в альбом
+   * (сохраняется сразу). Новая форма из слияния показывается крупно, упавшая сверху
+   * получает наклейку «Новая!». Возвращает, какой показ запущен.
+   */
+  private discover(key: RunKey, source: 'drop' | 'merge'): RevealKind | null {
+    const { ctx } = this;
+    const world = this.theme.id;
+    if (isDiscovered(ctx.save.data.album, world, key.tier, key.golden)) return null;
+    let found = { form: false, golden: false };
+    ctx.save.update((draft) => {
+      found = discoverForm(draft, world, key.tier, key.golden);
+    });
+    if (!found.form && !found.golden) return null;
+    this.newForms.push({ tier: key.tier, golden: found.golden });
+    const art = this.artFor(key.tier, key.golden);
+    const name = formOf(this.theme, key.tier).name[ctx.lang];
+    if (found.golden) {
+      this.toasts.show({
+        icon: { kind: 'key', art },
+        title: ctx.t('game.goldenForm'),
+        detail: name,
+      });
+    }
+    this.checkAchievements();
+    if (!found.form) return null;
+    if (source === 'drop') {
+      this.addSticker(key);
+      return null;
+    }
+    this.revealQueue.push(art);
+    if (!this.reveal.kind) this.nextReveal();
+    return key.tier === maxTier(this.theme) ? 'legendary' : 'form';
+  }
+
+  /** Показ следующей новой формы из очереди. Пока идёт показ, физика стоит. */
+  private nextReveal(): void {
+    const art = this.revealQueue.shift();
+    if (!art) {
+      if (this.cheerPending) {
+        this.cheerPending = false;
+        this.cheer();
+      }
+      return;
+    }
+    const { t, lang, audio } = this.ctx;
+    const legendary = art.tier === maxTier(this.theme);
+    this.gesture = null;
+    this.setRemoveMode(false);
+    if (legendary) audio.legendary();
+    else audio.newForm();
+    this.reveal.show(
+      {
+        art,
+        name: formOf(this.theme, art.tier).name[lang],
+        title: t(legendary ? 'game.legendary' : 'game.newForm'),
+        legendary,
+        hint: t('game.tapToContinue'),
+        durationMs: legendary ? NEW_FORM.legendaryMs : NEW_FORM.freezeMs,
+      },
+      () => this.nextReveal(),
+    );
+  }
+
+  private addSticker(key: RunKey): void {
+    const label = this.createText(
+      0,
+      0,
+      this.ctx.t('game.newSticker'),
+      {
+        fontSize: '28px',
+        fontStyle: '900',
+        color: '#e0457b',
+        stroke: '#ffffff',
+        strokeThickness: 8,
+      },
+      false,
+    ).setOrigin(0.5);
+    this.stickerLayer.add(label);
     if (!this.ctx.reducedMotion) {
-      this.tweens.killTweensOf(this.scoreText);
-      this.scoreText.setScale(1.15);
-      this.tweens.add({ targets: this.scoreText, scale: 1, duration: 220, ease: 'Quad.easeOut' });
+      label.setScale(0);
+      this.tweens.add({ targets: label, scale: 1, duration: 260, ease: 'Back.easeOut' });
+    }
+    this.stickers.push({ keyId: key.id, label, until: this.clock + STICKER_MS });
+    this.tickStickers();
+  }
+
+  /** Пасхалка: когда появляется Пробел, все клавиши в банке радуются и подпрыгивают. */
+  private cheer(): void {
+    let index = 0;
+    for (const view of this.views.values()) {
+      const delay = this.ctx.reducedMotion ? 0 : (index % 8) * 60;
+      index += 1;
+      this.time.delayedCall(delay, () => {
+        if (!view.scene) return;
+        view.showFace('joy', CHEER_MS);
+        if (!this.ctx.reducedMotion) view.squash(-0.5);
+      });
+    }
+    this.fx.celebrate(this.run.jar.width / 2, JAR.height * 0.4);
+  }
+
+  /** Новые достижения по сохранению и текущему забегу: награда сразу, плашка поверх игры. */
+  private checkAchievements(): void {
+    const { ctx } = this;
+    const stats = this.run.getStats();
+    const progress = { merges: stats.merges, goldenMerges: stats.goldenMerges, megas: stats.megas };
+    const owned = ctx.save.data.achievements;
+    const fresh = earnedAchievements(ctx.save.data, WORLD_SIZES, progress).filter(
+      (id) => !owned.includes(id),
+    );
+    if (fresh.length === 0) return;
+    let granted: AchievementDef[] = [];
+    ctx.save.update((draft) => {
+      granted = grantAchievements(draft, fresh, WORLD_SIZES);
+    });
+    for (const def of granted) {
+      this.achievements.push(def.id);
+      this.toasts.show({
+        icon: { kind: 'medal' },
+        title: ctx.t('game.achievement'),
+        detail: achievementTitle(def, ctx.t, ctx.lang),
+        coins: def.reward,
+      });
+      ctx.audio.achievement();
     }
   }
 
@@ -460,13 +776,13 @@ export class GameScene extends BaseScene {
 
   private endRun(): void {
     if (this.ending) return;
+    this.setRemoveMode(false);
     this.ending = true;
     this.gesture = null;
     this.held.clear();
     this.hanging?.destroy();
     this.hanging = null;
-    this.pauseButton.setVisible(false);
-    this.pauseButton.disableInteractive();
+    this.hud.hideControls();
     this.ctx.pause.setRunActive(false);
     this.ctx.audio.gameOver();
 
@@ -483,13 +799,17 @@ export class GameScene extends BaseScene {
         megas: stats.megas,
         coins: stats.coins,
       });
-    });
+    }, 'urgent');
     const summary: RunSummary = {
       score: stats.score,
       best: ctx.save.data.stats.bestScore,
       newRecord: outcome.newRecord,
       bestTier: stats.bestTier,
       world: this.theme.id,
+      coins: outcome.coins,
+      bonus: outcome.bonus,
+      newForms: [...this.newForms],
+      achievements: [...this.achievements],
     };
 
     this.banner = this.createBanner(ctx.t('game.overflow'));
@@ -501,7 +821,7 @@ export class GameScene extends BaseScene {
   /** Мягкая надпись поверх банки: без укоров, просто «банка переполнена». */
   private createBanner(text: string): Phaser.GameObjects.Container {
     const label = this.createText(0, 0, text, titleStyle(52), false).setOrigin(0.5);
-    const width = Math.min(JAR.width - 20, label.width + 80);
+    const width = Math.min(this.run.jar.width - 20, label.width + 80);
     const height = label.height + 50;
     const panel = new Phaser.GameObjects.Graphics(this);
     panel.fillStyle(0xffffff, 0.92);
@@ -539,7 +859,7 @@ export class GameScene extends BaseScene {
         megas: stats.megas,
         coins: stats.coins,
       });
-    });
+    }, 'urgent');
   }
 
   // ── Ввод ─────────────────────────────────────────────────────────────────────────────
@@ -556,10 +876,16 @@ export class GameScene extends BaseScene {
     this.input.on(
       Events.POINTER_DOWN,
       (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-        if (over.length > 0 || this.gesture || this.ending || this.frozen) return;
+        if (over.length > 0 || this.gesture || this.ending || this.halted) return;
         const point = this.toJar(pointer);
         const slop = pointer.wasTouch ? SQUISH.touchSlop : 0;
         const key = this.run.keyAt(point.x, point.y, slop);
+        if (this.removeMode) {
+          if (key) this.run.removeKey(key);
+          this.setRemoveMode(false);
+          this.gesture = { pointerId: pointer.id, kind: 'tool' };
+          return;
+        }
         if (key) {
           this.run.squish(key, point.x);
           this.gesture = { pointerId: pointer.id, kind: 'squish' };
@@ -570,7 +896,7 @@ export class GameScene extends BaseScene {
       },
     );
     this.input.on(Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
-      if (this.ending || this.frozen) return;
+      if (this.ending || this.halted || this.removeMode) return;
       const aiming = this.gesture?.kind === 'aim' && this.gesture.pointerId === pointer.id;
       // Мышью прицел ведётся и без нажатия, пальцем — пока палец на экране.
       const hovering = !this.gesture && !pointer.wasTouch && !pointer.isDown;
@@ -580,7 +906,7 @@ export class GameScene extends BaseScene {
       if (!this.gesture || this.gesture.pointerId !== pointer.id) return;
       const { kind } = this.gesture;
       this.gesture = null;
-      if (kind === 'aim' && !this.ending && !this.frozen) this.run.drop();
+      if (kind === 'aim' && !this.ending && !this.halted) this.run.drop();
     };
     this.input.on(Events.POINTER_UP, release);
     this.input.on(Events.POINTER_UP_OUTSIDE, release);
@@ -594,8 +920,14 @@ export class GameScene extends BaseScene {
         return;
       }
       if (event.repeat || this.ending) return;
-      if (action === 'drop' && !this.frozen) this.run.drop();
-      if (action === 'pause') this.openPause();
+      if (action === 'pause') {
+        this.openPause();
+        return;
+      }
+      // Space/Enter: пропустить легендарный показ, отменить «Удаление» или сбросить клавишу.
+      if (this.reveal.kind) this.reveal.skip();
+      else if (this.removeMode) this.setRemoveMode(false);
+      else if (!this.halted) this.run.drop();
     };
     const onKeyUp = (event: KeyboardEvent): void => {
       const action = actionForKey(event);
@@ -616,11 +948,12 @@ export class GameScene extends BaseScene {
       pause.subscribe({
         onPausedChange: (paused) => {
           // Пока открыт экран паузы, своя кнопка паузы не нужна и не должна выглядывать из-под окна.
-          this.pauseButton.setVisible(!pause.isUserPaused && !this.ending);
+          this.hud.pause.setVisible(!pause.isUserPaused && !this.ending);
           if (paused) {
             // Отпущенные во время паузы клавиши и пальцы не должны «залипнуть».
             this.held.clear();
             this.gesture = null;
+            this.setRemoveMode(false);
             // Снимок забега при любой паузе, в том числе при скрытии вкладки.
             this.saveSnapshot();
           }
@@ -639,6 +972,7 @@ export class GameScene extends BaseScene {
 
   private openPause(): void {
     if (this.ending) return;
+    this.setRemoveMode(false);
     this.ctx.pause.setUserPaused(true);
     this.scene.launch('Pause');
   }
@@ -647,20 +981,31 @@ export class GameScene extends BaseScene {
 
   /** Состояние забега для проверок. */
   debugState(): {
-    keys: { id: number; tier: number; x: number; y: number }[];
+    keys: { id: number; tier: number; golden: boolean; x: number; y: number }[];
     score: number;
     over: boolean;
     ending: boolean;
     current: number;
+    currentGolden: boolean;
     upcoming: number[];
     canDrop: boolean;
     danger: boolean;
     aimX: number;
+    jarWidth: number;
+    coins: number;
+    shownCoins: number;
+    charges: { shakes: number; removes: number };
+    removeMode: boolean;
+    reveal: RevealKind | null;
+    revealMs: number;
+    toasts: number;
+    stickers: number;
   } {
     return {
       keys: [...this.run.keys].map((key) => ({
         id: key.id,
         tier: key.tier,
+        golden: key.golden,
         x: key.body.position.x,
         y: key.body.position.y,
       })),
@@ -668,10 +1013,20 @@ export class GameScene extends BaseScene {
       over: this.run.over,
       ending: this.ending,
       current: this.run.currentTier,
+      currentGolden: this.run.current.golden,
       upcoming: this.run.upcoming.map((item) => item.tier),
-      canDrop: this.run.canDrop,
+      canDrop: this.run.canDrop && !this.halted && !this.ending && !this.removeMode,
       danger: this.run.dangerWarning,
       aimX: this.run.aimX,
+      jarWidth: this.run.jar.width,
+      coins: this.run.getStats().coins,
+      shownCoins: this.shownCoins,
+      charges: this.run.charges,
+      removeMode: this.removeMode,
+      reveal: this.reveal.kind,
+      revealMs: Math.round(this.reveal.elapsedMs),
+      toasts: this.toasts.pending,
+      stickers: this.stickers.length,
     };
   }
 
@@ -680,12 +1035,12 @@ export class GameScene extends BaseScene {
     return { x: this.jarRoot.x + x * this.jarScale, y: this.jarRoot.y + y * this.jarScale };
   }
 
-  debugPlaceKey(tier: number, x: number, y: number): void {
-    this.createView(this.run.placeKey(tier, x, y));
+  debugPlaceKey(tier: number, x: number, y: number, golden = false): void {
+    this.createView(this.run.placeKey(tier, x, y, golden));
   }
 
-  debugSetCurrent(tier: number): void {
-    this.run.setCurrentTier(tier);
+  debugSetCurrent(tier: number, golden = false): void {
+    this.run.setCurrentTier(tier, golden);
     this.showHanging(false);
   }
 

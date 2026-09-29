@@ -2,9 +2,10 @@ import type Phaser from 'phaser';
 import { UNIT } from '../../config/balance';
 import type { Lang } from '../../i18n';
 import { labelText, type FormData, type ThemeData } from '../../themes';
-import { heartPath, starPath } from './canvas';
+import { heartPath, roundRectPath, starPath } from './canvas';
 import { FACE_FRAMES, drawFace, faceLayout, type FaceLayout } from './faceArt';
 import {
+  GOLD,
   drawKeycap,
   keyColors,
   keycapGeometry,
@@ -28,6 +29,8 @@ export interface KeyArt {
   height: number;
   faceLayout: FaceLayout;
   colors: KeyColors;
+  /** Золотая версия: золотой корпус, рамка и искорки. */
+  golden: boolean;
 }
 
 export const FX = {
@@ -35,6 +38,12 @@ export const FX = {
   heart: 'fx:heart',
   dot: 'fx:dot',
   sparkle: 'fx:sparkle',
+} as const;
+
+/** Значки интерфейса: монетка «клац» и медаль достижений. */
+export const UI_ART = {
+  coin: 'ui:coin',
+  medal: 'ui:medal',
 } as const;
 
 function createCanvas(
@@ -66,6 +75,36 @@ function keyLabel(form: FormData, lang: Lang): LabelArt {
   return { glyph: form.label.kind === 'glyph' ? form.label.glyph : 'crown' };
 }
 
+/** Колпачок формы: обычный или золотой. Рисуется, только если такой текстуры ещё нет. */
+function ensureKeyTexture(
+  scene: Phaser.Scene,
+  key: string,
+  form: FormData,
+  lang: Lang,
+  golden: boolean,
+): void {
+  if (scene.textures.exists(key)) return;
+  const width = form.size.w * UNIT;
+  const height = form.size.h * UNIT;
+  const canvas = createCanvas(
+    scene,
+    key,
+    (width + PAD * 2) * TEXTURE_SCALE,
+    (height + PAD * 2) * TEXTURE_SCALE,
+  );
+  if (!canvas) return;
+  canvas.ctx.setTransform(
+    TEXTURE_SCALE,
+    0,
+    0,
+    TEXTURE_SCALE,
+    PAD * TEXTURE_SCALE,
+    PAD * TEXTURE_SCALE,
+  );
+  drawKeycap(canvas.ctx, keycapGeometry(width, height), form.paint, keyLabel(form, lang), golden);
+  canvas.texture.refresh();
+}
+
 /**
  * Текстуры клавиш мира: рисуются кодом один раз на тир и язык (диздок, раздел 15),
  * повторный вызов ничего не перерисовывает.
@@ -85,28 +124,10 @@ export function ensureThemeArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang
       height,
       faceLayout: layout,
       colors: keyColors(form.paint),
+      golden: false,
     };
 
-    if (!scene.textures.exists(art.key)) {
-      const canvas = createCanvas(
-        scene,
-        art.key,
-        (width + PAD * 2) * TEXTURE_SCALE,
-        (height + PAD * 2) * TEXTURE_SCALE,
-      );
-      if (canvas) {
-        canvas.ctx.setTransform(
-          TEXTURE_SCALE,
-          0,
-          0,
-          TEXTURE_SCALE,
-          PAD * TEXTURE_SCALE,
-          PAD * TEXTURE_SCALE,
-        );
-        drawKeycap(canvas.ctx, geometry, form.paint, label);
-        canvas.texture.refresh();
-      }
-    }
+    ensureKeyTexture(scene, art.key, form, lang, false);
 
     if (!scene.textures.exists(art.face)) {
       const frameWidth = layout.frameWidth * TEXTURE_SCALE;
@@ -130,6 +151,18 @@ export function ensureThemeArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang
     }
     return art;
   });
+}
+
+/**
+ * Золотая версия клавиши. Золотые клавиши редкие, поэтому их текстуры рисуются лениво —
+ * при первой золотой клавише этого тира. Лицо у золотой клавиши то же.
+ */
+export function goldenArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang, art: KeyArt): KeyArt {
+  const form = theme.forms[art.tier - 1];
+  if (!form) return art;
+  const key = `${art.key}:gold`;
+  ensureKeyTexture(scene, key, form, lang, true);
+  return { ...art, key, colors: keyColors(form.paint, true), golden: true };
 }
 
 /** Белые текстуры частиц: окрашиваются tint под цвет клавиши. */
@@ -160,6 +193,94 @@ export function ensureFxArt(scene: Phaser.Scene): void {
     starPath(ctx, size / 2, size / 2, size * 0.48, 4, 0.3);
     ctx.fill();
   });
+}
+
+/** Значки интерфейса (монетка, медаль): рисуются один раз. */
+export function ensureUiArt(scene: Phaser.Scene): void {
+  const size = 64;
+  const draw = (key: string, paint: (ctx: CanvasRenderingContext2D) => void): void => {
+    if (scene.textures.exists(key)) return;
+    const canvas = createCanvas(scene, key, size, size);
+    if (!canvas) return;
+    paint(canvas.ctx);
+    canvas.texture.refresh();
+  };
+  draw(UI_ART.coin, (ctx) => drawCoin(ctx, size / 2, size / 2, size * 0.46));
+  draw(UI_ART.medal, (ctx) => drawMedal(ctx, size));
+}
+
+/** Монетка «клац»: золотой кружок с выпуклой клавишей в середине. */
+function drawCoin(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  const gradient = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  gradient.addColorStop(0, GOLD.light);
+  gradient.addColorStop(0.45, GOLD.base);
+  gradient.addColorStop(1, GOLD.deep);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = GOLD.outline;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.stroke();
+  // Маленькая клавиша-колпачок: корпус и светлая верхняя грань.
+  const k = r * 0.78;
+  roundRectPath(ctx, cx - k / 2, cy - k / 2, k, k, k * 0.25);
+  ctx.fillStyle = GOLD.deep;
+  ctx.fill();
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = GOLD.outline;
+  ctx.stroke();
+  roundRectPath(ctx, cx - k * 0.38, cy - k * 0.44, k * 0.76, k * 0.62, k * 0.18);
+  ctx.fillStyle = GOLD.light;
+  ctx.fill();
+  // Блик слева сверху.
+  ctx.beginPath();
+  ctx.ellipse(cx - r * 0.42, cy - r * 0.42, r * 0.16, r * 0.1, -Math.PI / 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.fill();
+}
+
+/** Медаль достижения: две ленточки и золотой кружок со звездой. */
+function drawMedal(ctx: CanvasRenderingContext2D, size: number): void {
+  const cx = size / 2;
+  const ribbon = (x: number, color: string, tilt: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(x - 7, 2);
+    ctx.lineTo(x + 7, 2);
+    ctx.lineTo(x + 7 + tilt, 30);
+    ctx.lineTo(x - 7 + tilt, 30);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  };
+  ribbon(cx - 9, '#ff8fb8', 6);
+  ribbon(cx + 9, '#8fd3ff', -6);
+  drawCoinBody(ctx, cx, size * 0.62, size * 0.33);
+  starPath(ctx, cx, size * 0.63, size * 0.18, 5, 0.48);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = GOLD.outline;
+  ctx.stroke();
+}
+
+function drawCoinBody(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  const gradient = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  gradient.addColorStop(0, GOLD.light);
+  gradient.addColorStop(0.5, GOLD.base);
+  gradient.addColorStop(1, GOLD.deep);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = GOLD.outline;
+  ctx.stroke();
 }
 
 /** Размер текстуры колпачка с полями, в единицах физики. */

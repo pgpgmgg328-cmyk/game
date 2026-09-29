@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { FaceFrame } from '../art/faceArt';
-import { TEXTURE_SCALE, type KeyArt } from '../art/textures';
+import { FX, TEXTURE_SCALE, type KeyArt } from '../art/textures';
 
 /** Пружинка сплющивания: жёсткость и затухание (1/с² и 1/с). */
 const SPRING_STIFFNESS = 380;
@@ -14,6 +14,18 @@ const BREATH_PERIOD_MS = 2600;
 const BLINK_MIN_MS = 3000;
 const BLINK_MAX_MS = 6000;
 const BLINK_MS = 130;
+/** Искорки золотой клавиши: сколько их и как долго горит одна. */
+const GLINTS = 2;
+const GLINT_MS = 700;
+const GLINT_PAUSE_MS = 900;
+
+interface Glint {
+  image: Phaser.GameObjects.Image;
+  /** Сколько осталось до следующей вспышки (меньше нуля — вспышка идёт). */
+  wait: number;
+  /** Прошло от начала вспышки. */
+  age: number;
+}
 
 export interface KeycapOptions {
   /** Дыхание и моргание. Выключены, если игрок просил меньше анимации. */
@@ -38,6 +50,7 @@ export class Keycap extends Phaser.GameObjects.Container {
   private blinkIn: number;
   private frameHold = 0;
   private heldFrame: FaceFrame = 'open';
+  private readonly glints: Glint[] = [];
   /** Общий масштаб поверх сплющивания: для появления и исчезновения. */
   pop = 1;
   /** Постоянный масштаб (например, маленькая клавиша в превью «Далее»). */
@@ -60,6 +73,7 @@ export class Keycap extends Phaser.GameObjects.Container {
       'open',
     ).setScale(1 / TEXTURE_SCALE);
     this.add([base, this.face]);
+    if (art.golden) this.createGlints(scene);
   }
 
   /** Удар или тап: amount 0…1 — насколько сильно сплющить. Отрицательный — вытянуть. */
@@ -99,6 +113,47 @@ export class Keycap extends Phaser.GameObjects.Container {
     const scale = this.baseScale * this.pop;
     this.setScale(scale / stretchY, scale * stretchY);
     this.updateFace(deltaMs);
+    if (this.idle) this.glints.forEach((glint) => this.updateGlint(glint, deltaMs));
+  }
+
+  /** Золотая клавиша блестит: искорки по очереди вспыхивают в случайных местах (диздок, раздел 3). */
+  private createGlints(scene: Phaser.Scene): void {
+    for (let i = 0; i < GLINTS; i += 1) {
+      const image = new Phaser.GameObjects.Image(scene, 0, 0, FX.sparkle).setTint(0xfff3b0);
+      const glint: Glint = { image, wait: i * (GLINT_PAUSE_MS / 2) + this.random() * 300, age: 0 };
+      this.placeGlint(glint);
+      // Без анимации (меньше движения) искорки просто светятся.
+      image.setAlpha(this.idle ? 0 : 0.9).setScale(this.idle ? 0 : this.glintScale() * 0.8);
+      this.glints.push(glint);
+      this.add(image);
+    }
+  }
+
+  private glintScale(): number {
+    return Math.min(0.55, Math.max(0.3, Math.min(this.art.width, this.art.height) / 110));
+  }
+
+  private placeGlint(glint: Glint): void {
+    const x = (this.random() - 0.5) * this.art.width * 0.8;
+    const y = (this.random() - 0.5) * this.art.height * 0.6 - this.art.height * 0.08;
+    glint.image.setPosition(x, y);
+  }
+
+  private updateGlint(glint: Glint, deltaMs: number): void {
+    if (glint.wait > 0) {
+      glint.wait -= deltaMs;
+      return;
+    }
+    glint.age += deltaMs;
+    const progress = Math.min(1, glint.age / GLINT_MS);
+    const flash = Math.sin(progress * Math.PI);
+    glint.image.setAlpha(flash).setScale(this.glintScale() * flash);
+    glint.image.setRotation(progress * 1.2);
+    if (progress >= 1) {
+      glint.age = 0;
+      glint.wait = GLINT_PAUSE_MS * (0.6 + this.random() * 0.8);
+      this.placeGlint(glint);
+    }
   }
 
   private updateFace(deltaMs: number): void {

@@ -19,6 +19,10 @@ const EMPTY_SUMMARY: RunSummary = {
   newRecord: false,
   bestTier: 1,
   world: DEFAULT_THEME_ID,
+  coins: 0,
+  bonus: 0,
+  newForms: [],
+  achievements: [],
 };
 
 /**

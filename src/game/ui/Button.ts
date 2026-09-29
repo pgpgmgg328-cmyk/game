@@ -6,8 +6,8 @@ export const BUTTON_DEPTH = 14;
 /** Минимальная высота кнопки: даже на самом узком экране это не меньше 48 CSS-пикселей. */
 export const MIN_BUTTON_HEIGHT = 110;
 
-export type ButtonVariant = 'primary' | 'secondary';
-export type ButtonIcon = 'pause';
+export type ButtonVariant = 'primary' | 'secondary' | 'active';
+export type ButtonIcon = 'pause' | 'shake' | 'remove';
 
 export interface ButtonOptions {
   /** Постоянный идентификатор кнопки (для автотестов). */
@@ -38,7 +38,14 @@ export interface ButtonHost extends Phaser.Scene {
 const PALETTE: Record<ButtonVariant, { face: number; side: number; text: string }> = {
   primary: { face: COLORS.mint, side: COLORS.mintDark, text: COLORS.mintText },
   secondary: { face: COLORS.keyFace, side: COLORS.keySide, text: COLORS.keyText },
+  /** Включённый режим (например, «Удаление» ждёт выбора клавиши). */
+  active: { face: 0xffb3c8, side: 0xe0708f, text: '#5a1a33' },
 };
+
+/** Размер значка на кнопке относительно высоты верхней грани. */
+const ICON_SIZE = 0.52;
+/** Кружок со счётчиком в углу кнопки. */
+const BADGE_RADIUS = 24;
 
 function lighten(color: number, amount: number): number {
   const channel = (shift: number) => {
@@ -53,18 +60,22 @@ export class Button extends Phaser.GameObjects.Container {
   readonly id: string;
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly label: Phaser.GameObjects.Text | null;
-  private readonly variant: ButtonVariant;
+  private variant: ButtonVariant;
+  private readonly baseVariant: ButtonVariant;
   private readonly icon: ButtonIcon | null;
   private readonly baseFontSize: number;
   private buttonWidth: number;
   private buttonHeight: number;
   private pressed = false;
   private hovered = false;
+  private disabled = false;
+  private badge: Phaser.GameObjects.Text | null = null;
 
   constructor(scene: ButtonHost, x: number, y: number, options: ButtonOptions) {
     super(scene, x, y);
     this.id = options.id;
     this.variant = options.variant ?? 'secondary';
+    this.baseVariant = this.variant;
     this.icon = options.icon ?? null;
     this.baseFontSize = options.fontSize ?? 44;
     this.buttonWidth = options.width;
@@ -103,7 +114,7 @@ export class Button extends Phaser.GameObjects.Container {
     this.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, () => {
       const wasPressed = this.pressed;
       this.setPressed(false);
-      if (!wasPressed) return;
+      if (!wasPressed || this.disabled) return;
       scene.playButtonSound();
       options.onClick();
     });
@@ -131,6 +142,48 @@ export class Button extends Phaser.GameObjects.Container {
     return this;
   }
 
+  /** Счётчик в углу кнопки (например, заряды «Встряски»); null — без счётчика. */
+  setBadge(value: number | null): this {
+    if (value === null) {
+      this.badge?.setVisible(false);
+      this.redraw();
+      return this;
+    }
+    if (!this.badge) {
+      const host = this.scene as ButtonHost;
+      this.badge = host
+        .createText(0, 0, '', { fontSize: '28px', fontStyle: '900', color: '#ffffff' }, false)
+        .setOrigin(0.5);
+      this.add(this.badge);
+    }
+    this.badge.setText(String(value)).setVisible(true);
+    this.redraw();
+    return this;
+  }
+
+  /** Недоступная кнопка видна бледной и не нажимается. */
+  setDisabled(disabled: boolean): this {
+    if (this.disabled === disabled) return this;
+    this.disabled = disabled;
+    this.setAlpha(disabled ? 0.55 : 1);
+    this.redraw();
+    return this;
+  }
+
+  /** Подсветка включённого режима. */
+  setHighlighted(active: boolean): this {
+    const variant = active ? 'active' : this.baseVariant;
+    if (variant === this.variant) return this;
+    this.variant = variant;
+    this.label?.setColor(PALETTE[variant].text);
+    this.redraw();
+    return this;
+  }
+
+  get isDisabled(): boolean {
+    return this.disabled;
+  }
+
   setButtonSize(width: number, height = this.buttonHeight): this {
     this.buttonWidth = width;
     this.buttonHeight = Math.max(MIN_BUTTON_HEIGHT, height);
@@ -152,16 +205,23 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   private setPressed(pressed: boolean): void {
+    if (pressed && this.disabled) return;
     if (this.pressed === pressed) return;
     this.pressed = pressed;
     this.redraw();
+  }
+
+  /** Место под значок слева от надписи, если на кнопке есть и то и другое. */
+  private iconSpace(): number {
+    if (!this.icon || !this.label) return 0;
+    return (this.buttonHeight - BUTTON_DEPTH) * ICON_SIZE + 12;
   }
 
   /** Длинная надпись уменьшается, чтобы поместиться в кнопку. */
   private fitLabel(): void {
     if (!this.label) return;
     this.label.setFontSize(this.baseFontSize);
-    const maxWidth = this.buttonWidth - 40;
+    const maxWidth = this.buttonWidth - 40 - this.iconSpace();
     if (this.label.width > maxWidth) {
       const size = Math.max(24, Math.floor((this.baseFontSize * maxWidth) / this.label.width));
       this.label.setFontSize(size);
@@ -188,20 +248,87 @@ export class Button extends Phaser.GameObjects.Container {
     g.fillRoundedRect(left + 16, top + 8, width - 32, Math.min(16, faceHeight * 0.14), 8);
 
     const centerY = top + faceHeight / 2;
-    this.label?.setPosition(0, centerY);
-    if (this.icon === 'pause') {
+    const iconSpace = this.iconSpace();
+    // Значок и надпись вместе: значок слева, надпись по центру оставшегося места.
+    const labelWidth = this.label?.width ?? 0;
+    const groupWidth = iconSpace + labelWidth;
+    const iconX = iconSpace > 0 ? -groupWidth / 2 + (iconSpace - 12) / 2 : 0;
+    this.label?.setPosition(
+      iconSpace > 0 ? -groupWidth / 2 + iconSpace + labelWidth / 2 : 0,
+      centerY,
+    );
+    if (this.icon) {
       const color = Phaser.Display.Color.HexStringToColor(colors.text).color;
-      const barWidth = faceHeight * 0.14;
-      const barHeight = faceHeight * 0.42;
-      g.fillStyle(color, 1);
+      drawIcon(g, this.icon, iconX, centerY, faceHeight * ICON_SIZE, color);
+    }
+    if (this.badge?.visible) {
+      const x = width / 2 - BADGE_RADIUS * 0.55;
+      const y = top - BADGE_RADIUS * 0.25;
+      g.fillStyle(0xff6f91, 1);
+      g.fillCircle(x, y, BADGE_RADIUS);
+      g.lineStyle(4, 0xffffff, 1);
+      g.strokeCircle(x, y, BADGE_RADIUS);
+      this.badge.setPosition(x, y);
+    }
+  }
+}
+
+/** Значки кнопок: рисуются линиями, чтобы быть чёткими на любом экране. size — ширина значка. */
+function drawIcon(
+  g: Phaser.GameObjects.Graphics,
+  icon: ButtonIcon,
+  x: number,
+  y: number,
+  size: number,
+  color: number,
+): void {
+  const s = size;
+  g.fillStyle(color, 1);
+  g.lineStyle(Math.max(4, s * 0.1), color, 1);
+  switch (icon) {
+    case 'pause': {
+      const barWidth = s * 0.27;
+      const barHeight = s * 0.81;
+      g.fillRoundedRect(x - barWidth * 1.6, y - barHeight / 2, barWidth, barHeight, barWidth / 3);
+      g.fillRoundedRect(x + barWidth * 0.6, y - barHeight / 2, barWidth, barHeight, barWidth / 3);
+      return;
+    }
+    case 'shake': {
+      // Банка с двумя клавишами и дуги «тряски» по бокам.
+      const w = s * 0.52;
+      const h = s * 0.66;
+      g.strokeRoundedRect(x - w / 2, y - h / 2 + s * 0.06, w, h, s * 0.1);
       g.fillRoundedRect(
-        -barWidth * 1.6,
-        centerY - barHeight / 2,
-        barWidth,
-        barHeight,
-        barWidth / 3,
+        x - w / 2 - s * 0.05,
+        y - h / 2 - s * 0.06,
+        w + s * 0.1,
+        s * 0.12,
+        s * 0.04,
       );
-      g.fillRoundedRect(barWidth * 0.6, centerY - barHeight / 2, barWidth, barHeight, barWidth / 3);
+      g.fillRoundedRect(x - w * 0.34, y + s * 0.08, w * 0.3, w * 0.3, s * 0.04);
+      g.fillRoundedRect(x + w * 0.02, y - s * 0.02, w * 0.3, w * 0.3, s * 0.04);
+      for (const side of [-1, 1]) {
+        g.beginPath();
+        g.arc(
+          x,
+          y + s * 0.04,
+          s * 0.46,
+          Math.PI / 2 - side * (Math.PI / 2) - 0.45,
+          Math.PI / 2 - side * (Math.PI / 2) + 0.45,
+        );
+        g.strokePath();
+      }
+      return;
+    }
+    case 'remove': {
+      // Клавиша, которую зачёркивает крестик.
+      const k = s * 0.7;
+      g.strokeRoundedRect(x - k / 2, y - k / 2, k, k, s * 0.14);
+      const d = s * 0.2;
+      g.lineStyle(Math.max(5, s * 0.13), color, 1);
+      g.lineBetween(x - d, y - d, x + d, y + d);
+      g.lineBetween(x + d, y - d, x - d, y + d);
+      return;
     }
   }
 }

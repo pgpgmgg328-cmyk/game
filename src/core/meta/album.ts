@@ -1,4 +1,6 @@
-import type { Save, WorldAlbum } from '../save/schema';
+import type { DeepReadonly, Save, WorldAlbum } from '../save/schema';
+
+type Album = DeepReadonly<Record<string, WorldAlbum>>;
 
 /** Мир в альбоме: id и сколько в нём форм. */
 export interface AlbumWorld {
@@ -6,16 +8,11 @@ export interface AlbumWorld {
   forms: number;
 }
 
-function entry(album: Readonly<Record<string, WorldAlbum>>, world: string): WorldAlbum {
+function entry(album: Album, world: string): DeepReadonly<WorldAlbum> {
   return album[world] ?? { forms: [], golden: [] };
 }
 
-export function isDiscovered(
-  album: Readonly<Record<string, WorldAlbum>>,
-  world: string,
-  tier: number,
-  golden: boolean,
-): boolean {
+export function isDiscovered(album: Album, world: string, tier: number, golden: boolean): boolean {
   const found = entry(album, world);
   return (golden ? found.golden : found.forms).includes(tier);
 }
@@ -44,7 +41,7 @@ export function discoverForm(
 
 /** Процент коллекции: обычные и золотые формы всех миров (диздок, раздел 6). */
 export function albumProgress(
-  album: Readonly<Record<string, WorldAlbum>>,
+  album: Album,
   worlds: readonly AlbumWorld[],
 ): { found: number; total: number; percent: number } {
   let found = 0;

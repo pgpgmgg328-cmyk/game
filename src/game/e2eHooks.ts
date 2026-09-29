@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { sanitizeSave } from '../core/save/schema';
 import type { GameContext } from './context';
 import { e2eParams } from './e2eParams';
 import { BaseScene } from './scenes/BaseScene';
@@ -49,14 +50,27 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
       const point = scene.jarToScene(x, y);
       return toCss(game, ctx, scene.cameras.main, point.x, point.y);
     },
-    placeKey: (tier: number, x: number, y: number) => gameScene()?.debugPlaceKey(tier, x, y),
-    setCurrent: (tier: number) => gameScene()?.debugSetCurrent(tier),
+    placeKey: (tier: number, x: number, y: number, golden = false) =>
+      gameScene()?.debugPlaceKey(tier, x, y, golden),
+    setCurrent: (tier: number, golden = false) => gameScene()?.debugSetCurrent(tier, golden),
     step: (steps: number) => gameScene()?.debugStep(steps),
     freeze: (frozen: boolean) => gameScene()?.debugFreeze(frozen),
     endRun: () => gameScene()?.debugEndRun(),
     /** Снимок забега из локального кэша (как его увидит игра после перезагрузки). */
     savedRun: () => ctx.platform.loadRunSnapshot(),
     stats: () => (ctx.saveLoaded ? ctx.save.data.stats : null),
+    /** Всё сохранение: монеты, апгрейды, альбом, достижения. */
+    save: () => (ctx.saveLoaded ? ctx.save.data : null),
+    /**
+     * Подменить части сохранения перед проверкой (например, купленные апгрейды или открытый
+     * альбом). Данные проходят ту же проверку, что и сохранение из облака.
+     */
+    patchSave: (patch: Record<string, unknown>) => {
+      if (!ctx.saveLoaded) return;
+      ctx.save.update((draft) => {
+        Object.assign(draft, sanitizeSave({ ...draft, ...patch }));
+      });
+    },
   };
 }
 
