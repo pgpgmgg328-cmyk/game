@@ -161,6 +161,7 @@ export interface E2eRunState {
   removeMode: boolean;
   reveal: 'form' | 'legendary' | null;
   revealMs: number;
+  hint: 'drag' | 'tap' | null;
   toasts: number;
   stickers: number;
 }

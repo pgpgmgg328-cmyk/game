@@ -40,11 +40,15 @@ export const FX = {
   sparkle: 'fx:sparkle',
 } as const;
 
-/** Значки интерфейса: монетка «клац» и медаль достижений. */
+/** Значки интерфейса: монетка «клац», медаль достижений и рука-подсказка обучения. */
 export const UI_ART = {
   coin: 'ui:coin',
   medal: 'ui:medal',
+  hand: 'ui:hand',
 } as const;
+
+/** Размер текстуры руки и где кончик пальца (в долях), чтобы указывать им точно в цель. */
+export const HAND_ART = { width: 192, height: 256, tipX: 78 / 192, tipY: 10 / 256 } as const;
 
 function createCanvas(
   scene: Phaser.Scene,
@@ -207,6 +211,67 @@ export function ensureUiArt(scene: Phaser.Scene): void {
   };
   draw(UI_ART.coin, (ctx) => drawCoin(ctx, size / 2, size / 2, size * 0.46));
   draw(UI_ART.medal, (ctx) => drawMedal(ctx, size));
+  if (!scene.textures.exists(UI_ART.hand)) {
+    const canvas = createCanvas(scene, UI_ART.hand, HAND_ART.width, HAND_ART.height);
+    if (canvas) {
+      drawHand(canvas.ctx);
+      canvas.texture.refresh();
+    }
+  }
+}
+
+/**
+ * Рука-подсказка: мультяшная белая перчатка с указательным пальцем вверх (без цвета кожи).
+ * Рисуется в 2× для чёткости; кончик пальца — в HAND_ART.tipX/tipY.
+ */
+function drawHand(ctx: CanvasRenderingContext2D): void {
+  const s = 2;
+  const outline = '#3a2e6e';
+  const glove = '#ffffff';
+  const shade = '#e6e2f5';
+  const part = (x: number, y: number, w: number, h: number, r: number, fill = glove): void => {
+    roundRectPath(ctx, x * s, y * s, w * s, h * s, r * s);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.stroke();
+  };
+  ctx.lineWidth = 5;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = outline;
+  // Согнутые пальцы за ладонью.
+  part(46, 40, 18, 28, 9);
+  part(60, 46, 16, 26, 8);
+  part(72, 54, 13, 22, 6.5);
+  // Ладонь и указательный палец.
+  part(20, 52, 62, 50, 18);
+  part(28, 4, 22, 62, 11);
+  // Палец переходит в ладонь без линии.
+  ctx.fillStyle = glove;
+  ctx.fillRect(30.5 * s, 50 * s, 17 * s, 14 * s);
+  // Складка на ладони и тень справа — перчатка объёмная.
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.ellipse(70 * s, 84 * s, 7 * s, 12 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(52 * s, 70 * s);
+  ctx.quadraticCurveTo(58 * s, 76 * s, 64 * s, 70 * s);
+  ctx.stroke();
+  // Большой палец.
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.ellipse(21 * s, 76 * s, 9 * s, 17 * s, -0.5, 0, Math.PI * 2);
+  ctx.fillStyle = glove;
+  ctx.fill();
+  ctx.stroke();
+  // Манжета.
+  part(26, 98, 52, 22, 8, '#8fd3ff');
+  // Блик на пальце.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.beginPath();
+  ctx.ellipse(34 * s, 18 * s, 3 * s, 7 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 /** Монетка «клац»: золотой кружок с выпуклой клавишей в середине. */

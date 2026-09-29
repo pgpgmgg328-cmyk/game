@@ -148,6 +148,50 @@ test.describe('мета в забеге', () => {
     expect(problems).toEqual([]);
   });
 
+  test('обучение: первые клавиши по сценарию, рука до первого слияния, потом «тап-тап»', async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    // Новый игрок: сохранение по умолчанию, обучение не пройдено.
+    await openGame(page, { lang: 'ru', seed: '5' });
+    await press(page, 'menu.play', true);
+    await waitScene(page, 'Game');
+    const start = await waitRun(page, (s) => s.hint === 'drag');
+    expect(start.current).toBe(1);
+    expect(start.upcoming).toEqual([1]);
+
+    // Игрок нажал — рука прячется; две Точки в одну точку дают первое слияние.
+    await tapJar(page, 300, -60, true);
+    const second = await waitRun(page, (s) => s.keys.length === 1 && s.hint === 'drag');
+    expect(second.current).toBe(1);
+    expect(second.upcoming).toEqual([2]);
+    await tapJar(page, 300, -60, true);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __e2e: { save(): { tutorial: { done: boolean } } } }).__e2e.save()
+          .tutorial.done,
+      undefined,
+      { timeout: 30_000 },
+    );
+    const merged = await waitRun(page, (s) => s.reveal === null && s.canDrop);
+    expect(merged.hint).toBeNull();
+    expect(merged.current).toBe(2);
+
+    // Через 30 с игры рука показывает «тап-тап» по клавише, пока игрок сам не тапнет.
+    await e2eCall(page, 'step', 1900);
+    await waitRun(page, (s) => s.hint === 'tap');
+    const key = (await runState(page)).keys[0]!;
+    await tapJar(page, key.x, key.y, true);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __e2e: { save(): { tutorial: { squish: boolean } } } }).__e2e.save()
+          .tutorial.squish,
+      undefined,
+      { timeout: 30_000 },
+    );
+    expect(problems).toEqual([]);
+  });
+
   test('легендарная форма: тап пропускает показ', async ({ page }) => {
     await startRun(page, {
       ...VETERAN_SAVE,

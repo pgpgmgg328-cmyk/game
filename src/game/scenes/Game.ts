@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DROP, JAR, NEW_FORM, RUN, SQUISH } from '../../config/balance';
+import { DROP, JAR, NEW_FORM, RUN, SQUISH, TUTORIAL } from '../../config/balance';
 import { actionForKey } from '../../core/input';
 import {
   earnedAchievements,
@@ -31,6 +31,7 @@ import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
 import { HUD_SIDE_ROOM, HUD_TOOLS_HEIGHT, HUD_TOP_HEIGHT, RunHud } from '../objects/RunHud';
 import { Toasts } from '../objects/Toasts';
+import { TutorialHand, type HintKind } from '../objects/TutorialHand';
 import { phaserMatter } from '../run/phaserMatter';
 import { Run, type RunEvent, type RunKey } from '../run/Run';
 import { BaseScene } from './BaseScene';
@@ -111,6 +112,7 @@ export class GameScene extends BaseScene {
   private toasts!: Toasts;
   private reveal!: FormReveal;
   private removeHint!: Phaser.GameObjects.Container;
+  private hand!: TutorialHand;
   private banner: Phaser.GameObjects.Container | null = null;
   private gesture: Gesture | null = null;
   private held = new Set<'left' | 'right'>();
@@ -126,6 +128,12 @@ export class GameScene extends BaseScene {
   private shakeOffset = 0;
   private removeMode = false;
   private cheerPending = false;
+  /** Обучение первого забега: рука «веди → отпусти», пока не случится первое слияние. */
+  private dragTutorial = false;
+  /** Подсказка про тап-сквиш, пока игрок ни разу не тапнул по клавише. */
+  private squishTutorial = false;
+  private nextSquishHintAt = 0;
+  private idleMs = 0;
   private ending = false;
   private frozen = false;
   private clock = 0;
@@ -144,11 +152,16 @@ export class GameScene extends BaseScene {
     this.art = ensureThemeArt(this, this.theme, ctx.lang);
     ensureFxArt(this);
     ensureUiArt(this);
+    this.dragTutorial = !save.tutorial.done;
+    this.squishTutorial = !save.tutorial.squish;
     this.run = new Run(phaserMatter, this.theme, {
       snapshot: data.snapshot,
       seed: e2eSeed(),
       modifiers: runModifiers(save.upgrades),
+      // Первые клавиши обучения: первое слияние — на втором-третьем броске (диздок, раздел 9).
+      opening: this.dragTutorial && !data.snapshot ? TUTORIAL.openingTiers : undefined,
     });
+    this.nextSquishHintAt = Math.max(TUTORIAL.squishHintAfterMs, this.run.elapsedMs + 5000);
     this.best = save.stats.bestScore;
     const stats = this.run.getStats();
     this.shownScore = stats.score;
@@ -215,6 +228,7 @@ export class GameScene extends BaseScene {
     this.views.forEach((view) => view.tick(delta, time));
     this.hanging?.tick(delta, time);
     this.tickScore(delta);
+    this.updateHints(delta);
     this.tickStickers();
     this.toasts.tick(delta, time);
     this.reveal.tick(delta, time);
@@ -301,6 +315,7 @@ export class GameScene extends BaseScene {
     this.shakeOffset = 0;
     this.removeMode = false;
     this.cheerPending = false;
+    this.idleMs = 0;
     this.ending = false;
     this.frozen = false;
     this.snapshotTimer = 0;
@@ -314,6 +329,7 @@ export class GameScene extends BaseScene {
     this.keysLayer = new Phaser.GameObjects.Container(this, 0, 0);
     this.stickerLayer = new Phaser.GameObjects.Container(this, 0, 0);
     this.removeHint = this.createRemoveHint();
+    this.hand = new TutorialHand(this);
     this.jarRoot = this.add.container(0, 0, [
       jar.back,
       this.guide.graphics,
@@ -323,6 +339,7 @@ export class GameScene extends BaseScene {
       this.fx.layer,
       this.stickerLayer,
       this.removeHint,
+      this.hand.layer,
     ]);
   }
 
@@ -505,6 +522,7 @@ export class GameScene extends BaseScene {
         view?.showFace('squish', 280);
         this.ctx.audio.squish(event.key.tier);
         this.fx.squish(event.key.body.position.x, event.key.body.bounds.min.y);
+        this.learnedSquish();
         break;
       }
       case 'shake':
@@ -523,6 +541,7 @@ export class GameScene extends BaseScene {
   }
 
   private onMerge(event: Extract<RunEvent, { type: 'merge' }>): void {
+    this.finishDragTutorial();
     // Сжатие → «клац» → поп: старые клавиши съезжаются в точку слияния и тают, новая выпрыгивает.
     for (const key of event.removed) {
       const view = this.views.get(key.id);
@@ -640,6 +659,100 @@ export class GameScene extends BaseScene {
     this.hud.setRemoveMode(enabled);
     this.removeHint.setVisible(enabled).setAlpha(1);
     if (enabled) this.gesture = null;
+  }
+
+  // ── Обучение ─────────────────────────────────────────────────────────────────────────
+
+  /** Подсказки обучения: рука «веди → отпусти», пока игрок бездействует, и «тап-тап» позже. */
+  private updateHints(delta: number): void {
+    const { hand } = this;
+    const busy =
+      this.halted || this.ending || this.removeMode || this.gesture !== null || this.held.size > 0;
+    if (busy) {
+      this.idleMs = 0;
+      if (hand.kind === 'drag' || (this.halted && hand.kind === 'tap')) hand.hide();
+    } else {
+      this.idleMs += delta;
+    }
+    if (this.dragTutorial) {
+      if (!busy && this.run.canDrop && this.idleMs >= TUTORIAL.handDelayMs) this.showDragHint();
+      else if (hand.kind === 'drag' && !this.run.canDrop) hand.hide();
+    } else if (
+      this.squishTutorial &&
+      !busy &&
+      hand.kind === null &&
+      this.run.elapsedMs >= this.nextSquishHintAt
+    ) {
+      this.nextSquishHintAt = this.run.elapsedMs + TUTORIAL.squishHintRepeatMs;
+      this.showSquishHint();
+    }
+    hand.tick(delta);
+  }
+
+  /**
+   * Рука берёт висящую клавишу, ведёт её к такой же клавише в банке и отпускает.
+   * Если такой клавиши нет — просто ведёт в сторону, чтобы было видно «веди → отпусти».
+   */
+  private showDragHint(): void {
+    const { tier, golden } = this.run.current;
+    const width = this.run.jar.width;
+    const size = this.run.sizeOf(tier);
+    const fromX = this.run.aimX;
+    let toX = fromX < width / 2 ? fromX + 160 : fromX - 160;
+    let topY = Number.POSITIVE_INFINITY;
+    for (const key of this.run.keys) {
+      if (key.tier !== tier || key.body.position.y >= topY) continue;
+      topY = key.body.position.y;
+      toX = key.body.position.x;
+    }
+    toX = Math.min(width - size.width / 2, Math.max(size.width / 2, toX));
+    this.hand.showDrag({
+      art: this.artFor(tier, golden),
+      fromX,
+      toX,
+      y: this.run.hangY(),
+      fallY: this.surfaceBelow(toX) - size.height / 2,
+    });
+  }
+
+  /** «Тап-тап» по верхней клавише кучи: она сминается, как от настоящего тапа. */
+  private showSquishHint(): void {
+    let target: RunKey | null = null;
+    for (const key of this.run.keys) {
+      if (!key.settled) continue;
+      if (!target || key.body.position.y < target.body.position.y) target = key;
+    }
+    if (!target) return;
+    const { id } = target;
+    this.hand.showTap({
+      x: target.body.position.x,
+      y: target.body.position.y,
+      onPress: () => {
+        const view = this.views.get(id);
+        view?.squash(0.8);
+        view?.showFace('squish', 240);
+      },
+    });
+  }
+
+  /** Первое слияние случилось: обучение пройдено, рука больше не показывается. */
+  private finishDragTutorial(): void {
+    if (!this.dragTutorial) return;
+    this.dragTutorial = false;
+    if (this.hand.kind === 'drag') this.hand.hide();
+    this.ctx.save.update((draft) => {
+      draft.tutorial.done = true;
+    });
+  }
+
+  /** Игрок сам тапнул по клавише: подсказка про сквиш больше не нужна. */
+  private learnedSquish(): void {
+    if (!this.squishTutorial) return;
+    this.squishTutorial = false;
+    if (this.hand.kind === 'tap') this.hand.hide();
+    this.ctx.save.update((draft) => {
+      draft.tutorial.squish = true;
+    });
   }
 
   // ── Альбом, показы и достижения ──────────────────────────────────────────────────────
@@ -998,6 +1111,7 @@ export class GameScene extends BaseScene {
     removeMode: boolean;
     reveal: RevealKind | null;
     revealMs: number;
+    hint: HintKind | null;
     toasts: number;
     stickers: number;
   } {
@@ -1025,6 +1139,7 @@ export class GameScene extends BaseScene {
       removeMode: this.removeMode,
       reveal: this.reveal.kind,
       revealMs: Math.round(this.reveal.elapsedMs),
+      hint: this.hand.kind,
       toasts: this.toasts.pending,
       stickers: this.stickers.length,
     };
