@@ -153,6 +153,69 @@ describe('CloudWriteScheduler', () => {
     expect(times.length).toBeGreaterThan(maxWritesPerWindow);
   });
 
+  it('whenSynced отправляет изменения сразу и ждёт, пока запись дойдёт до облака', async () => {
+    const { cloud, scheduler } = setup();
+    await expect(scheduler.whenSynced(5000)).resolves.toBe(true);
+    scheduler.request();
+    let synced: boolean | null = null;
+    void scheduler.whenSynced(5000).then((value) => {
+      synced = value;
+    });
+    expect(cloud.writes).toHaveLength(1);
+    await flushPromises();
+    expect(synced).toBeNull();
+    cloud.writes[0]?.resolve();
+    await flushPromises();
+    expect(synced).toBe(true);
+  });
+
+  it('whenSynced ждёт и повторную запись после ошибки, а не дождавшись — даёт false', async () => {
+    const { clock, cloud, scheduler } = setup();
+    scheduler.request();
+    const first = scheduler.whenSynced(10_000);
+    cloud.writes[0]?.reject();
+    await flushPromises();
+    clock.advance(2000);
+    cloud.writes[1]?.resolve();
+    await expect(first).resolves.toBe(true);
+
+    scheduler.request();
+    const second = scheduler.whenSynced(3000);
+    cloud.writes[2]?.reject();
+    await flushPromises();
+    clock.advance(3000);
+    await expect(second).resolves.toBe(false);
+  });
+
+  it('suspend копит изменения, resume отправляет их', async () => {
+    const { clock, cloud, scheduler } = setup();
+    scheduler.suspend();
+    scheduler.request(true);
+    clock.advance(5000);
+    expect(cloud.writes).toHaveLength(0);
+    expect(scheduler.pending).toBe(true);
+    scheduler.resume();
+    expect(cloud.writes).toHaveLength(1);
+  });
+
+  it('reset забывает изменения, будит ожидающих и не путается с ответом старой записи', async () => {
+    const { clock, cloud, scheduler } = setup();
+    scheduler.request(true);
+    scheduler.request();
+    const waiting = scheduler.whenSynced(10_000);
+    scheduler.reset();
+    await expect(waiting).resolves.toBe(false);
+    expect(scheduler.pending).toBe(false);
+    // Старая запись завершилась ошибкой уже после сброса: повтора быть не должно.
+    cloud.writes[0]?.reject();
+    await flushPromises();
+    clock.advance(60_000);
+    expect(cloud.writes).toHaveLength(1);
+    // Новые изменения пишутся как обычно.
+    scheduler.request(true);
+    expect(cloud.writes).toHaveLength(2);
+  });
+
   it('при исчерпанном лимите откладывает даже срочную запись до освобождения окна', async () => {
     const clock = new FakeClock();
     const times: number[] = [];

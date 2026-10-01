@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultSave } from '../src/core/save/schema';
 import { RUN_STORAGE_KEY, SAVE_STORAGE_KEY, readJson, writeJson } from '../src/platform/localCache';
-import { LocalPlatform } from '../src/platform/LocalPlatform';
+import { LOCAL_AD_MS, LocalPlatform } from '../src/platform/LocalPlatform';
+import { FakeClock, flushPromises } from './fakeClock';
 import { MemoryStorage } from './memoryStorage';
 
 async function platformWith(storage: MemoryStorage | null) {
@@ -108,5 +109,49 @@ describe('LocalPlatform', () => {
       platform.onPause(() => {})();
       platform.onResume(() => {})();
     }).not.toThrow();
+  });
+});
+
+describe('LocalPlatform: реклама и функции площадки', () => {
+  async function withClock() {
+    const clock = new FakeClock();
+    const platform = new LocalPlatform({ storage: null, lang: 'ru', deviceType: 'desktop', clock });
+    await platform.init();
+    return { platform, clock };
+  }
+
+  it('реклама — заглушка на 1 с, награда засчитывается', async () => {
+    const { platform, clock } = await withClock();
+    let rewarded = 0;
+    const interstitial = platform.showInterstitial();
+    const video = platform.showRewarded(() => {
+      rewarded += 1;
+    });
+    clock.advance(LOCAL_AD_MS - 1);
+    await flushPromises();
+    expect(rewarded).toBe(0);
+    clock.advance(1);
+    await expect(interstitial).resolves.toBe(true);
+    await expect(video).resolves.toBe('rewarded');
+    expect(rewarded).toBe(1);
+  });
+
+  it('покупок, входа, рекордов, отзыва и ярлыка без Яндекса нет', async () => {
+    const { platform } = await withClock();
+    expect(await platform.getCatalog()).toBeNull();
+    expect(await platform.getPurchases()).toBeNull();
+    expect(await platform.purchase('no_ads')).toBeNull();
+    expect(await platform.consumePurchase('t')).toBe(false);
+    expect(await platform.syncSave(1000)).toBe(false);
+    expect(platform.authorized).toBe(false);
+    expect(platform.canAuthorize).toBe(false);
+    expect(await platform.openAuthDialog()).toBe(false);
+    expect(await platform.submitScore(10)).toBe(false);
+    expect(await platform.getLeaderboard()).toBeNull();
+    expect(await platform.requestReview()).toBe('later');
+    expect(await platform.canAddShortcut()).toBe(false);
+    expect(await platform.addShortcut()).toBe(false);
+    expect(await platform.getFlags({ goldenChance: '0.02' })).toEqual({ goldenChance: '0.02' });
+    expect(() => platform.setBannerVisible(true)).not.toThrow();
   });
 });

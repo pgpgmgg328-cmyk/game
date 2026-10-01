@@ -22,6 +22,11 @@ export const DEFAULT_CLOUD_WRITE_OPTIONS: CloudWriteOptions = {
   retryDelaysMs: [2000, 5000, 15000, 30000, 60000],
 };
 
+interface SyncWaiter {
+  resolve: (synced: boolean) => void;
+  timer: unknown;
+}
+
 /**
  * Решает, когда отправлять сохранение в облако. Каждая запись отправляет самые свежие данные,
  * поэтому пропущенные промежуточные версии не теряются, а лимит запросов не превышается.
@@ -30,10 +35,14 @@ export class CloudWriteScheduler {
   private dirty = false;
   private urgent = false;
   private inFlight = false;
+  private suspended = false;
   private failures = 0;
+  /** Растёт при reset(): ответ записи, начатой до сброса, уже ничего не меняет. */
+  private generation = 0;
   private timer: unknown = null;
   private timerAt = Number.POSITIVE_INFINITY;
   private writeTimes: number[] = [];
+  private waiters: SyncWaiter[] = [];
   private readonly write: () => Promise<void>;
   private readonly clock: SchedulerClock;
   private readonly options: CloudWriteOptions;
@@ -74,8 +83,55 @@ export class CloudWriteScheduler {
     this.request(true);
   }
 
+  /**
+   * Дождаться, пока все изменения дойдут до облака (например, перед консумированием покупки).
+   * true — записано; false — не успели за timeoutMs (ошибки сети, лимит, запись приостановлена).
+   */
+  whenSynced(timeoutMs: number): Promise<boolean> {
+    if (!this.pending) return Promise.resolve(true);
+    this.flush();
+    return new Promise((resolve) => {
+      const waiter: SyncWaiter = { resolve, timer: null };
+      waiter.timer = this.clock.setTimeout(() => this.settle(waiter, false), timeoutMs);
+      this.waiters.push(waiter);
+    });
+  }
+
+  /** Приостановить запись (открыто окно выбора аккаунта): изменения копятся, но не уходят. */
+  suspend(): void {
+    this.suspended = true;
+  }
+
+  resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    this.attempt();
+  }
+
+  /**
+   * Забыть неотправленные изменения: игрок сменился (вход или выбор аккаунта), старые данные
+   * в его облако писать нельзя. Ответ записи, которая уже идёт, ни на что не повлияет.
+   */
+  reset(): void {
+    this.generation += 1;
+    this.cancelTimer();
+    this.dirty = false;
+    this.urgent = false;
+    this.inFlight = false;
+    this.suspended = false;
+    this.failures = 0;
+    this.waiters.slice().forEach((waiter) => this.settle(waiter, false));
+  }
+
+  private settle(waiter: SyncWaiter, synced: boolean): void {
+    if (!this.waiters.includes(waiter)) return;
+    this.waiters = this.waiters.filter((item) => item !== waiter);
+    this.clock.clearTimeout(waiter.timer);
+    waiter.resolve(synced);
+  }
+
   private attempt(): void {
-    if (!this.dirty || this.inFlight) return;
+    if (!this.dirty || this.inFlight || this.suspended) return;
 
     const now = this.clock.now();
     this.writeTimes = this.writeTimes.filter((time) => now - time < this.options.windowMs);
@@ -90,6 +146,7 @@ export class CloudWriteScheduler {
     this.urgent = false;
     this.inFlight = true;
     this.writeTimes.push(now);
+    const generation = this.generation;
 
     let result: Promise<void>;
     try {
@@ -100,16 +157,21 @@ export class CloudWriteScheduler {
     result
       .then(
         () => {
-          this.failures = 0;
+          if (generation === this.generation) this.failures = 0;
         },
         () => {
+          if (generation !== this.generation) return;
           this.dirty = true;
           this.failures += 1;
         },
       )
       .then(() => {
+        if (generation !== this.generation) return;
         this.inFlight = false;
-        if (!this.dirty) return;
+        if (!this.dirty) {
+          this.waiters.slice().forEach((waiter) => this.settle(waiter, true));
+          return;
+        }
         if (this.failures > 0) {
           this.schedule(this.retryDelay());
         } else if (this.urgent) {
