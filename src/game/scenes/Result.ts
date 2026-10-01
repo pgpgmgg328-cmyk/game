@@ -58,7 +58,6 @@ const EMPTY_SUMMARY: RunSummary = {
 /**
  * Экран результата (диздок, раздел 9): очки со счётчиком-тикалкой, «Новый рекорд!», монеты
  * за забег, открытые формы, самая большая клавиша, «Ещё раз» и «В меню».
- * «▶ ×2 монеты» за рекламу появится вместе с рекламой в M3.
  */
 export class ResultScene extends BaseScene {
   private summary: RunSummary = EMPTY_SUMMARY;
@@ -88,6 +87,7 @@ export class ResultScene extends BaseScene {
   private coinCounting = 0;
   private revealed = false;
   private coinsRevealed = false;
+  private leaving = false;
 
   constructor() {
     super('Result');
@@ -102,6 +102,7 @@ export class ResultScene extends BaseScene {
     this.coinCounting = 0;
     this.revealed = false;
     this.coinsRevealed = false;
+    this.leaving = false;
     const { t, lang } = this.ctx;
     const theme = getTheme(this.summary.world) ?? THEMES[0]!;
     const arts = ensureThemeArt(this, theme, lang);
@@ -171,16 +172,16 @@ export class ResultScene extends BaseScene {
       label: t('result.again'),
       width: 480,
       variant: 'primary',
-      onClick: () => this.scene.start('Game'),
+      onClick: () => void this.leave('Game'),
     });
     this.menu = new Button(this, 360, 0, {
       id: 'result.menu',
       label: t('result.menu'),
       width: 480,
-      onClick: () => this.scene.start('Menu'),
+      onClick: () => void this.leave('Menu'),
     });
     this.onKeyAction((action) => {
-      if (action === 'drop') this.scene.start('Game');
+      if (action === 'drop') void this.leave('Game');
     });
 
     this.recordText.setText(t('game.best', { score: formatNumber(this.summary.best, lang) }));
@@ -300,6 +301,19 @@ export class ResultScene extends BaseScene {
         this.keyName.setPosition(360, y + 280 * scale);
         return;
     }
+  }
+
+  /**
+   * «Ещё раз» и «В меню» — логическая пауза между забегами: только здесь может быть
+   * полноэкранная реклама (диздок, раздел 8). Она начинается сразу после нажатия, а следующий
+   * экран открывается, когда реклама закрыта или не нужна.
+   */
+  private async leave(target: 'Game' | 'Menu'): Promise<void> {
+    if (this.leaving) return;
+    this.leaving = true;
+    for (const button of this.getButtons()) button.setDisabled(true);
+    await this.ctx.ads.interstitial();
+    if (this.sys.isActive()) this.scene.start(target);
   }
 
   private placeCoins(y: number): void {

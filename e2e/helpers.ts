@@ -44,6 +44,32 @@ export async function useFakeSdk(page: Page): Promise<void> {
   );
 }
 
+export interface SdkCall {
+  name: string;
+  /** Какой экран был открыт в момент вызова. */
+  scene: string;
+}
+
+/** Все вызовы поддельного SDK по порядку. */
+export function sdkCalls(page: Page): Promise<SdkCall[]> {
+  return page.evaluate(
+    () => (window as unknown as { __fakeSdk: { calls: SdkCall[] } }).__fakeSdk.calls,
+  );
+}
+
+/** Имена вызовов поддельного SDK, начинающиеся с prefix. */
+export async function sdkNames(page: Page, prefix: string): Promise<string[]> {
+  return (await sdkCalls(page)).map((call) => call.name).filter((name) => name.startsWith(prefix));
+}
+
+/** Прислать событие площадки (game_api_pause, ACCOUNT_SELECTION_DIALOG_OPENED и т. п.). */
+export function emitSdk(page: Page, event: string): Promise<void> {
+  return page.evaluate(
+    (name) => (window as unknown as { __fakeSdk: { emit(e: string): void } }).__fakeSdk.emit(name),
+    event,
+  );
+}
+
 /**
  * Ждёт экран. Без видеокарты кадров мало, а первые 120 кадров после старта Phaser ограничивает шаг
  * времени 1/60 с, поэтому паузы по часам сцены (например, надпись перед результатом) тянутся дольше.

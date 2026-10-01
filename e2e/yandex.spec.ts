@@ -1,35 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   e2eState,
+  emitSdk as emit,
   getButton,
   openGame,
   press,
+  sdkCalls,
+  sdkNames as names,
   useFakeSdk,
   waitScene,
   watchConsole,
 } from './helpers';
-
-interface SdkCall {
-  name: string;
-  scene: string;
-}
-
-function sdkCalls(page: Page): Promise<SdkCall[]> {
-  return page.evaluate(
-    () => (window as unknown as { __fakeSdk: { calls: SdkCall[] } }).__fakeSdk.calls,
-  );
-}
-
-async function names(page: Page, prefix: string): Promise<string[]> {
-  return (await sdkCalls(page)).map((call) => call.name).filter((name) => name.startsWith(prefix));
-}
-
-function emit(page: Page, event: 'game_api_pause' | 'game_api_resume'): Promise<void> {
-  return page.evaluate(
-    (name) => (window as unknown as { __fakeSdk: { emit(e: string): void } }).__fakeSdk.emit(name),
-    event,
-  );
-}
 
 test.describe('SDK Яндекса (поддельный)', () => {
   test.use({ viewport: { width: 1280, height: 720 } });

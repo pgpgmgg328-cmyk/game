@@ -75,6 +75,8 @@ export default defineConfig(
         localStorage: 'readonly',
         location: 'readonly',
         URLSearchParams: 'readonly',
+        setTimeout: 'readonly',
+        btoa: 'readonly',
       },
     },
   },

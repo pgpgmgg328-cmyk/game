@@ -37,7 +37,11 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     layout: () => ctx.layout,
     settings: () => (ctx.saveLoaded ? ctx.save.data.settings : null),
     paused: () => ctx.pause.isPaused,
+    /** Весь звук выключен системной паузой (вкладка, фокус, SDK, реклама). */
+    muted: () => ctx.pause.isAudioMuted,
     gameplayActive: () => ctx.pause.isGameplayActive,
+    /** Реклама: идёт ли показ и разрешена ли сейчас полноэкранная. */
+    ads: () => ({ busy: ctx.ads.busy, interstitialAllowed: ctx.ads.interstitialAllowed }),
     audio: () => ctx.audio.state,
     /** Статусы сцен Phaser (5 — работает, 6 — на паузе). */
     scenes: () =>

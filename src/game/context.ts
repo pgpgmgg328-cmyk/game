@@ -7,6 +7,7 @@ import { PauseController } from '../core/pause/PauseController';
 import type { SaveManager } from '../core/save/SaveManager';
 import { createTranslator, type Lang, type Translate } from '../i18n';
 import type { Platform } from '../platform';
+import { AdService } from './AdService';
 import type { Viewport } from './viewport';
 
 /** Ключ контекста в game.registry. */
@@ -21,6 +22,8 @@ export class GameContext {
   readonly pause = new PauseController();
   /** Синтез звука и музыки (включается по первому жесту игрока). */
   readonly audio = new AudioEngine();
+  /** Показ рекламы: пауза и тишина на время показа, правила полноэкранной рекламы. */
+  readonly ads: AdService;
   /** Игрок попросил браузер убрать лишнюю анимацию (prefers-reduced-motion). */
   readonly reducedMotion: boolean;
   lang: Lang = 'ru';
@@ -35,6 +38,13 @@ export class GameContext {
     this.platform = platform;
     this.viewport = viewport;
     this.reducedMotion = reducedMotion;
+    this.ads = new AdService({
+      platform,
+      pause: this.pause,
+      noAds: () => this.saveLoaded && this.save.data.purchases.noAds,
+      completedRuns: () => (this.saveLoaded ? this.save.data.stats.runs : 0),
+      cooldownSec: () => this.flags.interstitialCooldownSec,
+    });
   }
 
   get layout(): Layout {
