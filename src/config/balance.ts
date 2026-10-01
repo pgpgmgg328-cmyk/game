@@ -23,7 +23,7 @@ export const UNIT = JAR.width / 12;
 
 /** Какие клавиши выпадают. */
 export const SPAWN = {
-  /** Веса тиров 1–5 (диздок, раздел 3). В M3 их можно будет переопределить флагом spawnWeights. */
+  /** Веса тиров 1–5 (диздок, раздел 3). Флаг spawnWeights может их заменить (FLAG_DEFAULTS). */
   weights: [30, 28, 22, 14, 6],
   /** С 3-й минуты веса плавно смещаются к тирам 3–5, но не выше (диздок, раздел 7). */
   lateWeights: [22, 25, 24, 18, 11],
@@ -120,7 +120,7 @@ export const COINS = {
   scorePerCoin: 100,
 } as const;
 
-/** Золотые клавиши (диздок, раздел 3). В M3 шанс можно будет менять флагом goldenChance. */
+/** Золотые клавиши (диздок, раздел 3). Флаг goldenChance может заменить базовый шанс (FLAG_DEFAULTS). */
 export const GOLDEN = {
   chance: 0.02,
   /** Прибавка к шансу за уровень апгрейда «+1% золотых». */
@@ -185,4 +185,34 @@ export const TUTORIAL = {
 export const NEW_FORM = {
   freezeMs: 1000,
   legendaryMs: 3000,
+} as const;
+
+/** Реклама (диздок, раздел 8). Пауза между полноэкранными показами — флаг interstitialCooldownSec. */
+export const ADS = {
+  /** Полноэкранной рекламы нет в первые столько завершённых забегов нового игрока. */
+  interstitialFreeRuns: 2,
+  /** «Второй шанс» убирает столько верхних клавиш. */
+  secondChanceKeys: 3,
+} as const;
+
+/** Разовые просьбы площадки (диздок, раздел 9). */
+export const PROMPTS = {
+  /** Оценку просим после первой формы этого тира (Энтер)… */
+  reviewFormTier: 9,
+  /** …или после нового рекорда, начиная с этого по счёту завершённого забега. */
+  reviewRecordFromRun: 3,
+  /** Кнопка «ярлык на рабочий стол» появляется в меню после стольких завершённых забегов. */
+  shortcutAfterRuns: 5,
+} as const;
+
+/**
+ * Значения remote config по умолчанию (диздок, раздел 11): с ними игра работает, если флаги
+ * не пришли или пришли битыми. Флаги задаются в Консоли строками, их разбирает core/flags.ts.
+ * dailyRewardCoins добавится в M4 вместе с ежедневным подарком.
+ */
+export const FLAG_DEFAULTS = {
+  goldenChance: GOLDEN.chance,
+  interstitialCooldownSec: 90,
+  spawnWeights: SPAWN.weights,
+  secondChanceEnabled: true,
 } as const;

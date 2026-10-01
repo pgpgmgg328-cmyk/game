@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DROP, JAR, NEW_FORM, RUN, SQUISH, TUTORIAL } from '../../config/balance';
+import { DROP, JAR, NEW_FORM, RUN, SPAWN, SQUISH, TUTORIAL } from '../../config/balance';
 import { actionForKey } from '../../core/input';
 import {
   earnedAchievements,
@@ -159,7 +159,9 @@ export class GameScene extends BaseScene {
     this.run = new Run(phaserMatter, this.theme, {
       snapshot: data.snapshot,
       seed: e2eSeed(),
-      modifiers: runModifiers(save.upgrades),
+      // Шанс золотой клавиши и веса спавна можно подкрутить флагами remote config.
+      modifiers: runModifiers(save.upgrades, ctx.flags.goldenChance),
+      spawn: { ...SPAWN, weights: ctx.flags.spawnWeights },
       // Первые клавиши обучения: первое слияние — на втором-третьем броске (диздок, раздел 9).
       opening: this.dragTutorial && !data.snapshot ? TUTORIAL.openingTiers : undefined,
     });

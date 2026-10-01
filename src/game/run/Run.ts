@@ -23,7 +23,7 @@ import {
 } from '../../core/run/merge';
 import { Rng, randomSeed } from '../../core/run/rng';
 import { RUN_SNAPSHOT_VERSION, type KeySnapshot, type RunSnapshot } from '../../core/run/snapshot';
-import { KeyQueue, type QueueItem } from '../../core/run/spawn';
+import { KeyQueue, type QueueItem, type SpawnSchedule } from '../../core/run/spawn';
 import { formOf, maxTier, type ThemeData } from '../../themes';
 import type { MatterBody, MatterCollisionEvent, MatterEngine, MatterModule } from './matter';
 
@@ -103,6 +103,8 @@ export interface RunOptions {
   modifiers?: RunModifiers;
   /** Первые тиры по порядку (обучение первого забега). */
   opening?: readonly number[];
+  /** Какие клавиши выпадают; по умолчанию — SPAWN из config/balance.ts (флаг spawnWeights меняет веса). */
+  spawn?: SpawnSchedule;
 }
 
 export interface RunStats {
@@ -204,7 +206,7 @@ export class Run {
     this.fxRng = new Rng((this.seed ^ 0x5bd1e995) >>> 0);
     this.queue = new KeyQueue(
       this.rng,
-      SPAWN,
+      options.spawn ?? SPAWN,
       { preview: this.preview, goldenChance: this.goldenChance, opening: options.opening },
       snapshot ? { current: snapshot.current, upcoming: snapshot.upcoming } : undefined,
     );

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { defaultFlagStrings, parseFlags } from '../../core/flags';
 import { offerableSnapshot } from '../../core/run/snapshot';
 import { restoreSave } from '../../core/save/restore';
 import { SaveManager } from '../../core/save/SaveManager';
@@ -62,7 +63,12 @@ export class PreloadScene extends BaseScene {
     document.title = ctx.t('game.title');
     ctx.viewport.setDesktop(ctx.platform.deviceType === 'desktop');
 
-    const sources = await ctx.platform.loadSave();
+    // Флаги remote config запрашиваются вместе с сохранениями: так загрузка не становится дольше.
+    const [sources, flags] = await Promise.all([
+      ctx.platform.loadSave(),
+      ctx.platform.getFlags(defaultFlagStrings()),
+    ]);
+    ctx.flags = parseFlags(flags);
     ctx.setSave(new SaveManager(restoreSave(sources), ctx.platform));
     ctx.audio.setSettings(ctx.save.data.settings);
     // Прерванный забег: предложим продолжить, а битый или пустой снимок просто уберём.

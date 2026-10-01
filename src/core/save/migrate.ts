@@ -14,6 +14,8 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
     const played = typeof stats.runs === 'number' && stats.runs > 0;
     return { ...data, v: 3, tutorial: { done: played, squish: played } };
   },
+  // v3 → v4 (M3): покупки и разовые просьбы площадки — пустые, их заполнит sanitizeSave.
+  3: (data) => ({ ...data, v: 4 }),
 };
 
 export type ReadResult =

@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import { AudioEngine } from '../audio/AudioEngine';
+import { defaultFlags, type GameFlags } from '../core/flags';
 import type { Layout } from '../core/layout';
 import type { RunSnapshot } from '../core/run/snapshot';
 import { PauseController } from '../core/pause/PauseController';
@@ -25,6 +26,8 @@ export class GameContext {
   lang: Lang = 'ru';
   /** Забег, прерванный перезагрузкой страницы: меню предложит его продолжить. */
   pendingRun: RunSnapshot | null = null;
+  /** Флаги remote config (приходят при загрузке; до того — значения по умолчанию). */
+  flags: GameFlags = defaultFlags();
   t: Translate = createTranslator('ru');
   private saveManager: SaveManager | null = null;
 

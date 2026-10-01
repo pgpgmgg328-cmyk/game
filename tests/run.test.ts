@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { COINS, DANGER, DROP, JAR, PHYSICS, RUN, SCORE, SQUISH } from '../src/config/balance';
+import {
+  COINS,
+  DANGER,
+  DROP,
+  JAR,
+  PHYSICS,
+  RUN,
+  SCORE,
+  SPAWN,
+  SQUISH,
+} from '../src/config/balance';
 import { runModifiers, type RunModifiers } from '../src/core/meta/upgrades';
 import { readRunSnapshot } from '../src/core/run/snapshot';
 import { BASE_MODIFIERS, Run, type RunEvent, type RunOptions } from '../src/game/run/Run';
@@ -32,6 +42,18 @@ function ofType<T extends RunEvent['type']>(events: RunEvent[], type: T) {
 }
 
 describe('забег на настоящей физике', () => {
+  it('веса спавна можно заменить (флаг spawnWeights)', () => {
+    const { run } = createRun(7, { spawn: { ...SPAWN, weights: [0, 0, 0, 1, 0] } });
+    const seen = new Set<number>([run.currentTier, ...run.upcoming.map((item) => item.tier)]);
+    for (let i = 0; i < 20; i += 1) {
+      run.setAim(i % 2 === 0 ? 120 : 480);
+      run.drop();
+      run.stepMany(COOLDOWN_STEPS);
+      seen.add(run.currentTier);
+    }
+    expect([...seen]).toEqual([4]);
+  });
+
   it('две одинаковые клавиши, сброшенные друг на друга, сливаются в следующую форму', () => {
     const { run, events } = createRun();
     run.setCurrentTier(1);

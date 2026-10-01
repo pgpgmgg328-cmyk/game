@@ -1,7 +1,7 @@
 import { UPGRADES } from '../../config/balance';
 
 /** Текущая версия схемы. При изменении формата: увеличить версию и добавить миграцию в migrate.ts. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface Settings {
   sound: boolean;
@@ -46,8 +46,29 @@ export interface Tutorial {
   squish: boolean;
 }
 
-export interface SaveV3 {
-  v: 3;
+/** Покупки (config/iap.ts). Постоянные ещё и восстанавливаются из getPurchases() при каждом запуске. */
+export interface Purchases {
+  /** «Без рекламы»: нет полноэкранной рекламы и стики-баннера. */
+  noAds: boolean;
+  /** «Набор украшений»: скины банки и фоны (M4). */
+  skinsPack: boolean;
+  /**
+   * Токены расходуемых покупок, которые уже выданы, но ещё не консумированы. Если консумировать
+   * не получилось, при следующем запуске покупка придёт снова — по токену она не выдаётся дважды.
+   */
+  granted: string[];
+}
+
+/** Разовые просьбы площадки (диздок, раздел 9). */
+export interface Prompts {
+  /** Оценку игры уже просили (или игра уже оценена): больше не спрашиваем. */
+  review: boolean;
+  /** Ярлык на рабочий стол уже добавлен. */
+  shortcut: boolean;
+}
+
+export interface SaveV4 {
+  v: 4;
   /** Счётчик изменений. Из облака и локального кэша берём сохранение с большим rev. */
   rev: number;
   settings: Settings;
@@ -61,10 +82,12 @@ export interface SaveV3 {
   /** Полученные достижения. */
   achievements: string[];
   tutorial: Tutorial;
+  purchases: Purchases;
+  prompts: Prompts;
 }
 
 /** Сохранение текущей версии. */
-export type Save = SaveV3;
+export type Save = SaveV4;
 
 export type JsonObject = Record<string, unknown>;
 
@@ -77,7 +100,7 @@ export function isJsonObject(value: unknown): value is JsonObject {
 
 export function createDefaultSave(): Save {
   return {
-    v: 3,
+    v: 4,
     rev: 0,
     settings: { sound: true, music: true },
     stats: { bestScore: 0, runs: 0, merges: 0, goldenMerges: 0, megas: 0 },
@@ -86,11 +109,17 @@ export function createDefaultSave(): Save {
     album: {},
     achievements: [],
     tutorial: { done: false, squish: false },
+    purchases: { noAds: false, skinsPack: false, granted: [] },
+    prompts: { review: false, shortcut: false },
   };
 }
 
 /** id миров и достижений: латиница, цифры, дефис и подчёркивание. */
 const ID_PATTERN = /^[a-z0-9_-]{1,40}$/;
+/** Токен покупки — непустая строка разумной длины без пробелов. */
+const TOKEN_PATTERN = /^\S{1,200}$/;
+/** Больше невыданных токенов не храним: старые — давно консумированы или не нужны. */
+export const MAX_GRANTED_TOKENS = 20;
 /** Больше тиров в мире не бывает даже в будущих мирах. */
 const MAX_TIER = 30;
 
@@ -128,6 +157,14 @@ function sanitizeAlbum(value: unknown): Record<string, WorldAlbum> {
   return album;
 }
 
+function sanitizeTokens(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const tokens = value.filter(
+    (token): token is string => typeof token === 'string' && TOKEN_PATTERN.test(token),
+  );
+  return [...new Set(tokens)].slice(-MAX_GRANTED_TOKENS);
+}
+
 function sanitizeAchievements(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const ids = value.filter((id): id is string => typeof id === 'string' && ID_PATTERN.test(id));
@@ -144,12 +181,14 @@ export function sanitizeSave(data: JsonObject): Save {
   const stats = objectOr(data.stats);
   const upgrades = objectOr(data.upgrades);
   const tutorial = objectOr(data.tutorial);
+  const purchases = objectOr(data.purchases);
+  const prompts = objectOr(data.prompts);
   const levels = { ...defaults.upgrades };
   for (const id of UPGRADE_IDS) {
     levels[id] = Math.min(counterOr(upgrades[id], 0), UPGRADES[id].maxLevel);
   }
   return {
-    v: 3,
+    v: 4,
     rev: counterOr(data.rev, defaults.rev),
     settings: {
       sound: booleanOr(settings.sound, defaults.settings.sound),
@@ -169,6 +208,15 @@ export function sanitizeSave(data: JsonObject): Save {
     tutorial: {
       done: booleanOr(tutorial.done, false),
       squish: booleanOr(tutorial.squish, false),
+    },
+    purchases: {
+      noAds: booleanOr(purchases.noAds, false),
+      skinsPack: booleanOr(purchases.skinsPack, false),
+      granted: sanitizeTokens(purchases.granted),
+    },
+    prompts: {
+      review: booleanOr(prompts.review, false),
+      shortcut: booleanOr(prompts.shortcut, false),
     },
   };
 }

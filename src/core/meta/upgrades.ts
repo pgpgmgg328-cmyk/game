@@ -39,7 +39,7 @@ export interface RunModifiers {
 
 /**
  * Эффекты апгрейдов (диздок, раздел 6). baseGoldenChance — базовый шанс золотой клавиши
- * (в M3 его сможет переопределить флаг goldenChance).
+ * (его может заменить флаг goldenChance, core/flags.ts).
  */
 export function runModifiers(
   levels: Readonly<Record<UpgradeId, number>>,

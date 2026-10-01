@@ -12,7 +12,7 @@ describe('readSave', () => {
 
   it('читает корректное сохранение текущей версии', () => {
     const save: Save = {
-      v: 3,
+      v: 4,
       rev: 7,
       settings: { sound: false, music: true },
       stats: { bestScore: 1234, runs: 5, merges: 300, goldenMerges: 4, megas: 1 },
@@ -21,6 +21,8 @@ describe('readSave', () => {
       album: { classic: { forms: [1, 2, 3, 7], golden: [2] } },
       achievements: ['first_clack', 'caps'],
       tutorial: { done: true, squish: false },
+      purchases: { noAds: true, skinsPack: false, granted: ['t-1'] },
+      prompts: { review: true, shortcut: false },
     };
     expect(readSave(save)).toEqual({ kind: 'ok', save });
   });
@@ -39,7 +41,7 @@ describe('readSave', () => {
 
   it('заменяет битые поля значениями по умолчанию и сохраняет остальные', () => {
     const result = readSave({
-      v: 3,
+      v: 4,
       rev: -5,
       settings: { sound: 'нет', music: false },
       stats: { bestScore: 1.5, runs: 3, merges: -1 },
@@ -52,12 +54,14 @@ describe('readSave', () => {
       },
       achievements: ['caps', 'caps', 42, 'Плохой id'],
       tutorial: { done: 'да', squish: true },
+      purchases: { noAds: 1, skinsPack: true, granted: ['a', 'a', '', 'с пробелом', 5, 'b'] },
+      prompts: 'нет',
       junk: 1,
     });
     expect(result).toEqual({
       kind: 'ok',
       save: {
-        v: 3,
+        v: 4,
         rev: 0,
         settings: { sound: true, music: false },
         stats: { bestScore: 0, runs: 3, merges: 0, goldenMerges: 0, megas: 0 },
@@ -67,12 +71,46 @@ describe('readSave', () => {
         album: { classic: { forms: [1, 2, 3], golden: [] } },
         achievements: ['caps'],
         tutorial: { done: false, squish: true },
+        purchases: { noAds: false, skinsPack: true, granted: ['a', 'b'] },
+        prompts: { review: false, shortcut: false },
+      },
+    });
+  });
+
+  it('хранит не больше 20 последних невыданных токенов покупок', () => {
+    const granted = Array.from({ length: 25 }, (_, index) => `t${index}`);
+    const result = readSave({ v: 4, rev: 1, purchases: { granted } });
+    expect(result.kind === 'ok' && result.save.purchases.granted).toEqual(granted.slice(5));
+  });
+
+  it('версия 3 → 4: прогресс на месте, покупок и просьб ещё не было', () => {
+    const result = readSave({
+      v: 3,
+      rev: 12,
+      coins: 400,
+      stats: { bestScore: 900, runs: 4, merges: 10, goldenMerges: 1, megas: 0 },
+      upgrades: { shake: 2 },
+      album: { classic: { forms: [1, 2], golden: [] } },
+      achievements: ['first_clack'],
+      tutorial: { done: true, squish: true },
+    });
+    expect(result).toEqual({
+      kind: 'ok',
+      save: {
+        ...createDefaultSave(),
+        rev: 12,
+        coins: 400,
+        stats: { bestScore: 900, runs: 4, merges: 10, goldenMerges: 1, megas: 0 },
+        upgrades: { shake: 2, remove: 0, preview: 0, squish: 0, golden: 0, jar: 0 },
+        album: { classic: { forms: [1, 2], golden: [] } },
+        achievements: ['first_clack'],
+        tutorial: { done: true, squish: true },
       },
     });
   });
 
   it('не падает, если settings и stats — не объекты', () => {
-    expect(readSave({ v: 3, rev: 3, settings: null, stats: 'много' })).toEqual({
+    expect(readSave({ v: 4, rev: 3, settings: null, stats: 'много' })).toEqual({
       kind: 'ok',
       save: { ...createDefaultSave(), rev: 3 },
     });
@@ -206,7 +244,7 @@ describe('restoreSave', () => {
   });
 
   it('не разрешает запись, если где-то лежит сохранение новее версии игры', () => {
-    expect(restoreSave({ cloud: { v: 4, rev: 10 }, local: save(1) })).toEqual({
+    expect(restoreSave({ cloud: { v: 5, rev: 10 }, local: save(1) })).toEqual({
       save: save(1),
       writable: false,
       source: 'local',
