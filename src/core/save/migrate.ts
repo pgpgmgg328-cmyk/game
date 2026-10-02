@@ -16,6 +16,9 @@ export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   },
   // v3 → v4 (M3): покупки и разовые просьбы площадки — пустые, их заполнит sanitizeSave.
   3: (data) => ({ ...data, v: 4 }),
+  // v4 → v5 (M4): миры, ежедневное и украшения — по умолчанию, их заполнит sanitizeSave.
+  // Кто уже вырастил Пробел, получит второй мир сразу: открытие считается по альбому.
+  4: (data) => ({ ...data, v: 5 }),
 };
 
 export type ReadResult =

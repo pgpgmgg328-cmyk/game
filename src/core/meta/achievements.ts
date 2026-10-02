@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS } from '../../config/balance';
 import type { DeepReadonly, Save } from '../save/schema';
+import { hasRainbowJar } from './daily';
 
 /** Сколько всего сделано за текущий забег (ещё не попало в статистику сохранения). */
 export interface RunProgress {
@@ -32,7 +33,7 @@ const WORLD1 = 'classic';
 
 /**
  * Все достижения (диздок, раздел 6) плюс секретные за пасхалки. «Коллекционер мира» —
- * по одному на мир; «Неделя подряд» появится вместе с ежедневными заданиями в M4.
+ * по одному на мир.
  */
 export function achievementList(worlds: readonly CollectorWorld[]): AchievementDef[] {
   return [
@@ -47,6 +48,7 @@ export function achievementList(worlds: readonly CollectorWorld[]): AchievementD
       secret: false,
       world: world.id,
     })),
+    { id: 'week_streak', reward: ACHIEVEMENTS.week_streak, secret: false },
     { id: 'pianist', reward: ACHIEVEMENTS.pianist, secret: true },
     { id: 'secret_word', reward: ACHIEVEMENTS.secret_word, secret: true },
   ];
@@ -77,6 +79,7 @@ export function earnedAchievements(
       earned.push(`collector_${world.id}`);
     }
   }
+  if (hasRainbowJar(save)) earned.push('week_streak');
   return earned;
 }
 

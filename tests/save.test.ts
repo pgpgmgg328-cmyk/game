@@ -12,7 +12,7 @@ describe('readSave', () => {
 
   it('читает корректное сохранение текущей версии', () => {
     const save: Save = {
-      v: 4,
+      v: 5,
       rev: 7,
       settings: { sound: false, music: true },
       stats: { bestScore: 1234, runs: 5, merges: 300, goldenMerges: 4, megas: 1 },
@@ -23,6 +23,18 @@ describe('readSave', () => {
       tutorial: { done: true, squish: false },
       purchases: { noAds: true, skinsPack: false, granted: ['t-1'] },
       prompts: { review: true, shortcut: false },
+      worlds: { selected: 'candy', bought: ['candy'] },
+      daily: {
+        day: 20_000,
+        task: { world: 'classic', tier: 6 },
+        taskDone: true,
+        gift: true,
+        adGift: false,
+        streak: 3,
+        lastDone: 20_000,
+        bestStreak: 5,
+      },
+      decor: { jar: 'rainbow', background: 'clouds' },
     };
     expect(readSave(save)).toEqual({ kind: 'ok', save });
   });
@@ -41,7 +53,7 @@ describe('readSave', () => {
 
   it('заменяет битые поля значениями по умолчанию и сохраняет остальные', () => {
     const result = readSave({
-      v: 4,
+      v: 5,
       rev: -5,
       settings: { sound: 'нет', music: false },
       stats: { bestScore: 1.5, runs: 3, merges: -1 },
@@ -56,12 +68,15 @@ describe('readSave', () => {
       tutorial: { done: 'да', squish: true },
       purchases: { noAds: 1, skinsPack: true, granted: ['a', 'a', '', 'с пробелом', 5, 'b'] },
       prompts: 'нет',
+      worlds: { selected: 'Не мир', bought: ['candy', 'candy', 7] },
+      daily: { day: 1.5, task: { world: 'space', tier: 40 }, streak: 4, lastDone: -1, gift: 'да' },
+      decor: { jar: 5, background: 'clouds' },
       junk: 1,
     });
     expect(result).toEqual({
       kind: 'ok',
       save: {
-        v: 4,
+        v: 5,
         rev: 0,
         settings: { sound: true, music: false },
         stats: { bestScore: 0, runs: 3, merges: 0, goldenMerges: 0, megas: 0 },
@@ -73,13 +88,17 @@ describe('readSave', () => {
         tutorial: { done: false, squish: true },
         purchases: { noAds: false, skinsPack: true, granted: ['a', 'b'] },
         prompts: { review: false, shortcut: false },
+        worlds: { selected: '', bought: ['candy'] },
+        // Серия без дня последнего задания не считается.
+        daily: { ...createDefaultSave().daily },
+        decor: { jar: 'glass', background: 'clouds' },
       },
     });
   });
 
   it('хранит не больше 20 последних невыданных токенов покупок', () => {
     const granted = Array.from({ length: 25 }, (_, index) => `t${index}`);
-    const result = readSave({ v: 4, rev: 1, purchases: { granted } });
+    const result = readSave({ v: 5, rev: 1, purchases: { granted } });
     expect(result.kind === 'ok' && result.save.purchases.granted).toEqual(granted.slice(5));
   });
 
@@ -109,8 +128,35 @@ describe('readSave', () => {
     });
   });
 
+  it('версия 4 → 5: прогресс и покупки на месте, миры, ежедневное и украшения — по умолчанию', () => {
+    const result = readSave({
+      v: 4,
+      rev: 30,
+      coins: 5000,
+      album: { classic: { forms: [1, 2, 11], golden: [] } },
+      purchases: { noAds: true, skinsPack: true, granted: [] },
+      prompts: { review: true, shortcut: false },
+    });
+    expect(result).toEqual({
+      kind: 'ok',
+      save: {
+        ...createDefaultSave(),
+        rev: 30,
+        coins: 5000,
+        album: { classic: { forms: [1, 2, 11], golden: [] } },
+        purchases: { noAds: true, skinsPack: true, granted: [] },
+        prompts: { review: true, shortcut: false },
+      },
+    });
+  });
+
+  it('серия не короче лучшей серии не бывает: лучшая не меньше текущей', () => {
+    const result = readSave({ v: 5, rev: 1, daily: { streak: 6, lastDone: 100, bestStreak: 2 } });
+    expect(result.kind === 'ok' && result.save.daily).toMatchObject({ streak: 6, bestStreak: 6 });
+  });
+
   it('не падает, если settings и stats — не объекты', () => {
-    expect(readSave({ v: 4, rev: 3, settings: null, stats: 'много' })).toEqual({
+    expect(readSave({ v: 5, rev: 3, settings: null, stats: 'много' })).toEqual({
       kind: 'ok',
       save: { ...createDefaultSave(), rev: 3 },
     });
@@ -244,7 +290,7 @@ describe('restoreSave', () => {
   });
 
   it('не разрешает запись, если где-то лежит сохранение новее версии игры', () => {
-    expect(restoreSave({ cloud: { v: 5, rev: 10 }, local: save(1) })).toEqual({
+    expect(restoreSave({ cloud: { v: 6, rev: 10 }, local: save(1) })).toEqual({
       save: save(1),
       writable: false,
       source: 'local',

@@ -147,6 +147,21 @@ describe('достижения', () => {
     expect(draft.coins).toBe(ACHIEVEMENTS.first_clack + ACHIEVEMENTS.pianist);
   });
 
+  it('«Неделя подряд» — после семи дней «Клавиши дня» подряд', () => {
+    expect(
+      earnedAchievements(
+        save((d) => (d.daily.bestStreak = 6)),
+        WORLDS,
+      ),
+    ).toEqual([]);
+    expect(
+      earnedAchievements(
+        save((d) => (d.daily.bestStreak = 7)),
+        WORLDS,
+      ),
+    ).toEqual(['week_streak']);
+  });
+
   it('секретные скрыты, у каждого мира свой коллекционер', () => {
     const list = achievementList([...WORLDS, { id: 'candy', forms: 11 }]);
     expect(list.filter((item) => item.secret).map((item) => item.id)).toEqual([
@@ -154,6 +169,7 @@ describe('достижения', () => {
       'secret_word',
     ]);
     expect(list.map((item) => item.id)).toContain('collector_candy');
+    expect(list.map((item) => item.id)).toContain('week_streak');
     expect(new Set(list.map((item) => item.id)).size).toBe(list.length);
   });
 });

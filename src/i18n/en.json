@@ -110,5 +110,7 @@
   "leaderboard.signIn": "Sign in",
   "menu.shortcut": "Add to desktop",
   "menu.shortcutDone.title": "Done!",
-  "menu.shortcutDone.text": "The game is now on your desktop"
+  "menu.shortcutDone.text": "The game is now on your desktop",
+  "ach.week_streak": "Week in a Row",
+  "ach.week_streak.hint": "Key of the Day 7 days in a row"
 }

@@ -13,6 +13,8 @@ export interface GameFlags {
   spawnWeights: number[];
   /** Предлагать ли «Второй шанс» за рекламу при переполнении банки. */
   secondChanceEnabled: boolean;
+  /** Подарок дня в монетах (второй подарок, за рекламу, — такой же). */
+  dailyRewardCoins: number;
 }
 
 /** Границы разумного: значение вне них считаем ошибкой в консоли и берём значение по умолчанию. */
@@ -20,6 +22,7 @@ const LIMITS = {
   goldenChance: { min: 0, max: 0.5 },
   interstitialCooldownSec: { min: 0, max: 3600 },
   spawnWeight: { max: 1000 },
+  dailyRewardCoins: { min: 0, max: 10_000 },
 } as const;
 
 const TRUE_WORDS = new Set(['true', '1', 'yes', 'on']);
@@ -31,6 +34,7 @@ export function defaultFlags(): GameFlags {
     interstitialCooldownSec: FLAG_DEFAULTS.interstitialCooldownSec,
     spawnWeights: [...FLAG_DEFAULTS.spawnWeights],
     secondChanceEnabled: FLAG_DEFAULTS.secondChanceEnabled,
+    dailyRewardCoins: FLAG_DEFAULTS.dailyRewardCoins,
   };
 }
 
@@ -42,6 +46,7 @@ export function defaultFlagStrings(): Record<string, string> {
     interstitialCooldownSec: String(flags.interstitialCooldownSec),
     spawnWeights: flags.spawnWeights.join(','),
     secondChanceEnabled: String(flags.secondChanceEnabled),
+    dailyRewardCoins: String(flags.dailyRewardCoins),
   };
 }
 
@@ -83,12 +88,13 @@ function parseBoolean(raw: string | undefined): boolean | null {
  */
 export function parseFlags(raw: Readonly<Record<string, string>>): GameFlags {
   const defaults = defaultFlags();
-  const { goldenChance, interstitialCooldownSec } = LIMITS;
+  const { goldenChance, interstitialCooldownSec, dailyRewardCoins } = LIMITS;
   const cooldown = parseNumber(
     raw.interstitialCooldownSec,
     interstitialCooldownSec.min,
     interstitialCooldownSec.max,
   );
+  const gift = parseNumber(raw.dailyRewardCoins, dailyRewardCoins.min, dailyRewardCoins.max);
   return {
     goldenChance:
       parseNumber(raw.goldenChance, goldenChance.min, goldenChance.max) ?? defaults.goldenChance,
@@ -96,5 +102,7 @@ export function parseFlags(raw: Readonly<Record<string, string>>): GameFlags {
     spawnWeights:
       parseWeights(raw.spawnWeights, defaults.spawnWeights.length) ?? defaults.spawnWeights,
     secondChanceEnabled: parseBoolean(raw.secondChanceEnabled) ?? defaults.secondChanceEnabled,
+    // Монеты — целые: «150.7» округляется вниз.
+    dailyRewardCoins: gift === null ? defaults.dailyRewardCoins : Math.floor(gift),
   };
 }

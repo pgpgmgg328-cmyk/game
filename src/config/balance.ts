@@ -155,7 +155,7 @@ export const SHAKE = {
   spin: 0.08,
 } as const;
 
-/** Достижения: награда в монетах. «Неделя подряд» и коллекции миров 2–3 — в M4. */
+/** Достижения: награда в монетах. */
 export const ACHIEVEMENTS = {
   first_clack: 50,
   caps: 100,
@@ -164,10 +164,37 @@ export const ACHIEVEMENTS = {
   golden_rush: 200,
   /** «Коллекционер мира»: все формы одного мира (по достижению на мир). */
   collector: 300,
+  /** «Неделя подряд»: «Клавиша дня» семь дней подряд (DAILY.streakGoal). */
+  week_streak: 300,
   pianist: 100,
   secret_word: 50,
   /** «Золотая лихорадка»: столько слияний с золотой клавишей за всё время. */
   goldenRushMerges: 10,
+} as const;
+
+/**
+ * Открытие миров (диздок, раздел 5): мир открывается Пробелом в прошлом мире или за монеты.
+ * Цены по порядку миров; первый мир открыт всегда. Особенности миров (упругость, гравитация,
+ * «Карамелька», «Метеорчик») — в данных миров в themes/, как требует CLAUDE.md.
+ */
+export const WORLDS = {
+  unlockPrices: [0, 3000, 8000],
+  /** Будущие миры (осенний, новогодний): каждый следующий дороже прошлого на столько. */
+  laterPriceStep: 4000,
+} as const;
+
+/** Ежедневное (диздок, раздел 6). Размер подарка дня — флаг dailyRewardCoins (FLAG_DEFAULTS). */
+export const DAILY = {
+  /** «Клавиша дня» — форма от и до, но не больше лучшей формы игрока в этом мире. */
+  taskMinTier: 5,
+  taskMaxTier: 10,
+  /** Награда за задание: base + perTier × номер формы. */
+  taskCoinsBase: 150,
+  taskCoinsPerTier: 50,
+  /** Столько дней подряд — банка «Радуга» и «Неделя подряд». */
+  streakGoal: 7,
+  /** Подарок дня в монетах (значение флага по умолчанию); второй, за рекламу, — такой же. */
+  giftCoins: 150,
 } as const;
 
 /** Обучение первого забега (диздок, раздел 9). */
@@ -208,11 +235,11 @@ export const PROMPTS = {
 /**
  * Значения remote config по умолчанию (диздок, раздел 11): с ними игра работает, если флаги
  * не пришли или пришли битыми. Флаги задаются в Консоли строками, их разбирает core/flags.ts.
- * dailyRewardCoins добавится в M4 вместе с ежедневным подарком.
  */
 export const FLAG_DEFAULTS = {
   goldenChance: GOLDEN.chance,
   interstitialCooldownSec: 90,
   spawnWeights: SPAWN.weights,
   secondChanceEnabled: true,
+  dailyRewardCoins: DAILY.giftCoins,
 } as const;

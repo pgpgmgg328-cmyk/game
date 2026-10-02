@@ -8,6 +8,7 @@ const TITLES: Readonly<Record<string, TranslationKey>> = {
   spacebar: 'ach.spacebar',
   mega: 'ach.mega',
   golden_rush: 'ach.golden_rush',
+  week_streak: 'ach.week_streak',
   pianist: 'ach.pianist',
   secret_word: 'ach.secret_word',
 };
@@ -18,6 +19,7 @@ const HINTS: Readonly<Record<string, TranslationKey>> = {
   spacebar: 'ach.spacebar.hint',
   mega: 'ach.mega.hint',
   golden_rush: 'ach.golden_rush.hint',
+  week_streak: 'ach.week_streak.hint',
   pianist: 'ach.pianist.hint',
   secret_word: 'ach.secret_word.hint',
 };
