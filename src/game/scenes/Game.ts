@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ADS, DROP, JAR, NEW_FORM, RUN, SPAWN, SQUISH, TUTORIAL } from '../../config/balance';
 import { actionForKey } from '../../core/input';
+import type { BotView } from '../../core/run/bot';
 import {
   earnedAchievements,
   grantAchievements,
@@ -1234,6 +1235,41 @@ export class GameScene extends BaseScene {
     this.setRemoveMode(false);
     this.ctx.pause.setUserPaused(true);
     this.scene.launch('Pause');
+  }
+
+  // ── Режим бота (?bot=1) ──────────────────────────────────────────────────────────────
+
+  /** Что видит бот, когда клавишу можно бросить; null — сейчас бросать нельзя. */
+  botView(): BotView | null {
+    if (!this.run.canDrop || this.halted || this.ending || this.offering || this.removeMode) {
+      return null;
+    }
+    if (this.ctx.pause.isPaused) return null;
+    const keys = [...this.run.keys].map((key) => ({
+      tier: key.tier,
+      x: key.body.position.x,
+      top: key.body.bounds.min.y,
+      width: key.body.bounds.max.x - key.body.bounds.min.x,
+    }));
+    return {
+      tier: this.run.currentTier,
+      width: this.run.sizeOf(this.run.currentTier).width,
+      jarWidth: this.run.jar.width,
+      floorY: this.run.jar.height,
+      keys,
+    };
+  }
+
+  /** Бросок бота: прицел и сброс, как с клавиатуры. */
+  botDrop(x: number): void {
+    if (!this.botView()) return;
+    this.run.setAim(x);
+    this.run.drop();
+  }
+
+  /** Бот не ждёт конца «ЛЕГЕНДАРНОЙ ФОРМЫ!»: пропускает её, как тапом. */
+  botSkipReveal(): void {
+    if (this.reveal.kind === 'legendary') this.reveal.skip();
   }
 
   // ── Для автотестов (window.__e2e) ────────────────────────────────────────────────────

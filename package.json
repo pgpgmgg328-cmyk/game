@@ -18,6 +18,7 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm run test",
     "e2e": "vite build && playwright test",
+    "soak": "vite build && playwright test -c playwright.soak.config.ts",
     "moderation": "vite build && node scripts/moderation-check.ts",
     "zip": "vite build && node scripts/moderation-check.ts && node scripts/zip.ts",
     "offline": "vite build && node scripts/standalone.ts"

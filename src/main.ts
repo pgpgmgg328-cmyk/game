@@ -1,8 +1,10 @@
 import './style.css';
 import Phaser from 'phaser';
+import { installBot } from './game/bot';
 import { installBrowserGuards } from './game/browserGuards';
 import { CONTEXT_KEY, GameContext, LAYOUT_EVENT } from './game/context';
 import { installE2eHooks } from './game/e2eHooks';
+import { botMode } from './game/e2eParams';
 import { bindLifecycle } from './game/lifecycle';
 import { AlbumScene } from './game/scenes/Album';
 import { BackgroundScene } from './game/scenes/Background';
@@ -72,6 +74,8 @@ viewport.onChange((layout) => {
 viewport.start();
 bindLifecycle(ctx, container, () => returnToMenu(game));
 installE2eHooks(game, ctx);
+const bot = botMode();
+if (bot !== 'off') installBot(game, bot);
 
 /**
  * Выход в главное меню из любого экрана: после окна выбора аккаунта прогресс другой
