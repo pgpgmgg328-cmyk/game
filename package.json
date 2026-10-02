@@ -1,6 +1,6 @@
 {
   "name": "squishy-keys",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "«Сквиши Клавиши: Мерж до Пробела» — HTML5-игра для Яндекс Игр",
   "type": "module",
