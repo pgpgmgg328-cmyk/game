@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   SDK_TAG,
@@ -6,6 +7,7 @@ import {
   checkForbiddenCode,
   checkI18nKeys,
   checkIndexAtRoot,
+  checkMonetization,
   checkPurchases,
   checkSdkCalls,
   checkSdkTag,
@@ -62,6 +64,22 @@ describe('правила npm run moderation', () => {
     expect(checkSdkCalls('LoadingAPI GameplayAPI', 'f.GameplayAPI.start()').problems).toHaveLength(
       2,
     );
+  });
+
+  it('покупки консумируются, валюта и реклама — через SDK', () => {
+    const platform = readFileSync(
+      fileURLToPath(new URL('../src/platform/YandexPlatform.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(checkMonetization(platform).problems).toEqual([]);
+    expect(checkMonetization('payments.getPurchases(); showFullscreenAdv({})').problems).toEqual([
+      'В YandexPlatform нет payments.consumePurchase()',
+      'В YandexPlatform нет payments.getCatalog()',
+      'В YandexPlatform нет getPriceCurrencyImage()',
+      'В YandexPlatform нет adv.showRewardedVideo()',
+      'В YandexPlatform нет колбэк onRewarded',
+      'В YandexPlatform нет adv.hideBannerAdv()',
+    ]);
   });
 
   it('внешние адреса, window.open, <a href> и S3 Яндекса', () => {

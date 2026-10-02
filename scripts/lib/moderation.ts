@@ -102,6 +102,31 @@ export function checkSdkCalls(bundle: string, platformSource: string): CheckResu
   return result('Вызываются LoadingAPI.ready и GameplayAPI (п. 1.19.2, 1.19.3)', problems);
 }
 
+/**
+ * Обязательная обработка покупок и рекламы в YandexPlatform: необработанные покупки
+ * проверяются при запуске и консумируются (п. 1.13.1), валюта — из SDK (п. 1.13.2),
+ * награда за рекламу — только в onRewarded, баннер — через API (п. 1.13.5).
+ */
+export function checkMonetization(platformSource: string): CheckResult {
+  const required: [RegExp, string][] = [
+    [/\.getPurchases\(\)/, 'payments.getPurchases()'],
+    [/\.consumePurchase\(/, 'payments.consumePurchase()'],
+    [/\.getCatalog\(\)/, 'payments.getCatalog()'],
+    [/getPriceCurrencyImage\(/, 'getPriceCurrencyImage()'],
+    [/showFullscreenAdv\(/, 'adv.showFullscreenAdv()'],
+    [/showRewardedVideo\(/, 'adv.showRewardedVideo()'],
+    [/onRewarded:/, 'колбэк onRewarded'],
+    [/hideBannerAdv\(\)/, 'adv.hideBannerAdv()'],
+  ];
+  const problems = required
+    .filter(([pattern]) => !pattern.test(platformSource))
+    .map(([, name]) => `В YandexPlatform нет ${name}`);
+  return result(
+    'Покупки консумируются, валюта и реклама — через SDK (п. 1.13.1, 1.13.2, 1.13.5)',
+    problems,
+  );
+}
+
 const URL_PATTERN = /https?:\/\/[^\s"'`<>()\\]+/g;
 
 export function checkForbiddenCode(
@@ -197,6 +222,8 @@ export const EXTRA_MANUAL_CHECKS: readonly string[] = [
   'С debug-панелью (debug-mode=16): Game Ready зеленеет на меню, индикатор языка 文 зелёный на старте, индикатор геймплея 🎮 меняется в забеге, на паузе, в меню и на рекламе (п. 1.19, 2.14).',
   'Моки валюты на debug-панели: цены в магазине показываются как TST и ¥ (п. 1.13.2).',
   'После покупки «без рекламы» пропадает вся реклама игры, включая стики-баннер; остаются только реклама за награду и стартовая реклама платформы (п. 1.13.5).',
+  'В консоли на вкладке «Реклама» включена опция «Использовать API для показа sticky-баннера»: иначе баннер не скроется после покупки «Без рекламы» (п. 1.13.5).',
+  'Лидерборд с техническим названием bestScore создан в консоли; на экране «Рекорды» после входа видна своя строка.',
   'Покупка не пропадает, если обновить страницу, не нажав «Хорошо» в окне оплаты (п. 1.13.1).',
   'Межуровневая реклама начинается не позже чем через 2 секунды после нажатия кнопки (п. 4.4).',
   'Договор заключён (ЕЛС или РСЯ), на вкладке «Инап-покупки» написано «Покупки подключены» — без этого игру не отправить на модерацию.',
