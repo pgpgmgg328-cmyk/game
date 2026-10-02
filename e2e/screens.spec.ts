@@ -164,6 +164,35 @@ for (const size of SIZES) {
       expect(problems).toEqual([]);
     });
 
+    test('рекорды помещаются целиком, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(120_000);
+      const problems = watchConsole(page);
+      // Таблица приходит из SDK: берём поддельный SDK с соперниками.
+      await useFakeSdk(page);
+      await openGame(page, { seed: '7' });
+      await patchSave(page, { ...VETERAN_SAVE, stats: { bestScore: 6000, runs: 3 } });
+      await press(page, 'menu.leaderboard', size.mobile);
+      await waitScene(page, 'Leaderboard');
+      const rows = (self: boolean) =>
+        expect
+          .poll(async () => {
+            const board = await e2eState<{ rows: { self: boolean }[] } | null>(page, 'leaderboard');
+            return (board?.rows.length ?? 0) >= 10 && board!.rows.some((row) => row.self) === self;
+          })
+          .toBe(true);
+      await rows(false);
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `leaderboard-ru-${name}`);
+      // После входа своя строка подсвечена, кнопки входа больше нет.
+      await press(page, 'leaderboard.signIn', size.mobile);
+      await rows(true);
+      await expectButtonsFit(page);
+      await screenshot(page, `leaderboard-signed-ru-${name}`);
+      expect(problems).toEqual([]);
+    });
+
     test('предложения за рекламу и «×2 монеты» помещаются, скриншоты', async ({ page }) => {
       test.skip(!size.allScreens, 'только целевые разрешения');
       test.setTimeout(240_000);

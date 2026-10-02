@@ -7,7 +7,6 @@ import {
   type AchievementDef,
 } from '../../core/meta/achievements';
 import { discoverForm, isDiscovered } from '../../core/meta/album';
-import { applyRunOutcome, type RunOutcome } from '../../core/meta/progress';
 import { runModifiers } from '../../core/meta/upgrades';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import {
@@ -1050,17 +1049,14 @@ export class GameScene extends BaseScene {
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
     const stats = this.run.getStats();
-    let outcome: RunOutcome = { newRecord: false, coins: 0, bonus: 0 };
-    ctx.save.update((draft) => {
-      outcome = applyRunOutcome(draft, {
-        score: stats.score,
-        completed: true,
-        merges: stats.merges,
-        goldenMerges: stats.goldenMerges,
-        megas: stats.megas,
-        coins: stats.coins,
-      });
-    }, 'urgent');
+    const outcome = ctx.recordRun({
+      score: stats.score,
+      completed: true,
+      merges: stats.merges,
+      goldenMerges: stats.goldenMerges,
+      megas: stats.megas,
+      coins: stats.coins,
+    });
     const summary: RunSummary = {
       score: stats.score,
       best: ctx.save.data.stats.bestScore,
@@ -1111,16 +1107,14 @@ export class GameScene extends BaseScene {
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
     const stats = this.run.getStats();
-    ctx.save.update((draft) => {
-      applyRunOutcome(draft, {
-        score: stats.score,
-        completed: false,
-        merges: stats.merges,
-        goldenMerges: stats.goldenMerges,
-        megas: stats.megas,
-        coins: stats.coins,
-      });
-    }, 'urgent');
+    ctx.recordRun({
+      score: stats.score,
+      completed: false,
+      merges: stats.merges,
+      goldenMerges: stats.goldenMerges,
+      megas: stats.megas,
+      coins: stats.coins,
+    });
   }
 
   // ── Ввод ─────────────────────────────────────────────────────────────────────────────

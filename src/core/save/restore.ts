@@ -36,3 +36,19 @@ export function restoreSave(
   if (local.kind === 'ok') return { save: local.save, writable, source: 'local' };
   return { save: createDefaultSave(), writable, source: 'default' };
 }
+
+/**
+ * Прогресс после входа в Яндекс ID или выбора аккаунта (docs/yandex/sdk/sdk-events.md): облако
+ * аккаунта важнее локального кэша — этот прогресс выбрал игрок или перенесла платформа.
+ * Если в облаке пусто или данные битые, остаётся текущий прогресс: его надо сразу записать
+ * в облако аккаунта. Сохранение от более новой версии игры читается как есть и не затирается.
+ */
+export function restoreAfterSignIn(
+  cloudRaw: unknown,
+  current: Save,
+  read: (raw: unknown) => ReadResult = readSave,
+): RestoredSave {
+  const cloud = read(cloudRaw);
+  if (cloud.kind === 'ok') return { save: cloud.save, writable: true, source: 'cloud' };
+  return { save: current, writable: cloud.kind !== 'future', source: 'local' };
+}

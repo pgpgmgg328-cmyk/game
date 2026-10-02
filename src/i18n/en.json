@@ -101,5 +101,11 @@
   "shop.no_ads.title": "No ads",
   "shop.no_ads.text": "Removes ads between runs and the banner. Rewarded ads stay optional.",
   "shop.coins_1000.title": "1000 clacks",
-  "shop.coins_1000.text": "1000 coins for «+1» upgrades."
+  "shop.coins_1000.text": "1000 coins for «+1» upgrades.",
+  "leaderboard.yourBest": "Your best: {score}",
+  "leaderboard.you": "You",
+  "leaderboard.unavailable": "The leaderboard is not available yet",
+  "leaderboard.empty": "Nothing here yet. Play, and your record will be the first!",
+  "leaderboard.signInText": "Sign in with Yandex ID so everyone can see your record and your progress is on all your devices",
+  "leaderboard.signIn": "Sign in"
 }

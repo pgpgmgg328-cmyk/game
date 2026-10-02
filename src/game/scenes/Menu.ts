@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { grantAchievements, type SecretAchievement } from '../../core/meta/achievements';
 import { albumProgress } from '../../core/meta/album';
-import { applyRunOutcome } from '../../core/meta/progress';
 import { SecretWordTracker } from '../../core/menu/easterEggs';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
@@ -410,15 +409,13 @@ export class MenuScene extends BaseScene {
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
     const { snapshot } = dialog;
-    ctx.save.update((draft) => {
-      applyRunOutcome(draft, {
-        score: snapshot.score,
-        completed: false,
-        merges: snapshot.merges,
-        goldenMerges: snapshot.goldenMerges,
-        megas: snapshot.megas,
-        coins: snapshot.coins,
-      });
+    ctx.recordRun({
+      score: snapshot.score,
+      completed: false,
+      merges: snapshot.merges,
+      goldenMerges: snapshot.goldenMerges,
+      megas: snapshot.megas,
+      coins: snapshot.coins,
     });
     this.setMenuEnabled(true);
   }

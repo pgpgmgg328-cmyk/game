@@ -1,10 +1,13 @@
 import type Phaser from 'phaser';
 import { AudioEngine } from '../audio/AudioEngine';
 import { defaultFlags, type GameFlags } from '../core/flags';
+import { applyRunOutcome, type RunOutcome, type RunOutcomeInput } from '../core/meta/progress';
 import type { Layout } from '../core/layout';
 import type { RunSnapshot } from '../core/run/snapshot';
 import { PauseController } from '../core/pause/PauseController';
-import type { SaveManager } from '../core/save/SaveManager';
+import { restoreAfterSignIn } from '../core/save/restore';
+import { SaveManager } from '../core/save/SaveManager';
+import type { Save } from '../core/save/schema';
 import { createTranslator, type Lang, type Translate } from '../i18n';
 import type { Platform } from '../platform';
 import { AdService } from './AdService';
@@ -80,9 +83,56 @@ export class GameContext {
     this.t = createTranslator(lang);
   }
 
+  /**
+   * Итог забега — в сохранение и сразу в облако. Новый рекорд вошедшего игрока уходит в таблицу
+   * рекордов (диздок, раздел 10); у гостя площадка его не примет.
+   */
+  recordRun(input: RunOutcomeInput): RunOutcome {
+    let outcome: RunOutcome = { newRecord: false, coins: 0, bonus: 0 };
+    this.save.update((draft) => {
+      outcome = applyRunOutcome(draft, input);
+    }, 'urgent');
+    if (outcome.newRecord) void this.platform.submitScore(this.save.data.stats.bestScore);
+    return outcome;
+  }
+
   /** Немедленно отправить отложенные сохранения (пауза, скрытие вкладки). */
   flushSaves(): void {
     this.saveManager?.flush();
+  }
+
+  /**
+   * Вход в Яндекс ID по кнопке (п. 1.2.1). Перед входом прогресс гостя уходит в облако: если
+   * у аккаунта прогресса нет, платформа перенесёт этот. true — игрок вошёл.
+   */
+  async signIn(): Promise<boolean> {
+    if (!this.platform.canAuthorize) return this.platform.authorized;
+    this.flushSaves();
+    await this.platform.syncSave(3000);
+    if (!(await this.platform.openAuthDialog())) return false;
+    await this.reloadProgress();
+    return this.platform.authorized;
+  }
+
+  /**
+   * Перечитать прогресс после входа или выбора аккаунта (docs/yandex/sdk/sdk-events.md):
+   * облако аккаунта важнее локального кэша. Выбранный прогресс сразу записывается и в облако,
+   * и в кэш, чтобы старые данные гостя его не перебили. Покупки и рекорд — тоже заново.
+   */
+  async reloadProgress(): Promise<void> {
+    if (!this.saveManager) return;
+    const current = JSON.parse(JSON.stringify(this.saveManager.data)) as Save;
+    const sources = await this.platform.loadSave();
+    const restored = restoreAfterSignIn(sources.cloud, current);
+    this.saveManager = new SaveManager(restored, this.platform);
+    this.saveManager.update(() => undefined, 'urgent');
+    this.audio.setSettings(this.saveManager.data.settings);
+    this.bannerShown = null;
+    this.syncBanner();
+    void this.purchases.restore();
+    // Рекорд — в таблицу сразу после входа: экран рекордов покажет его уже в свежей таблице.
+    const best = this.saveManager.data.stats.bestScore;
+    if (this.platform.authorized && best > 0) await this.platform.submitScore(best);
   }
 
   /**

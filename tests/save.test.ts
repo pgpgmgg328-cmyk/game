@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readSave, type Migration } from '../src/core/save/migrate';
-import { restoreSave } from '../src/core/save/restore';
+import { restoreAfterSignIn, restoreSave } from '../src/core/save/restore';
 import { SaveManager, type SaveUrgency } from '../src/core/save/SaveManager';
 import { createDefaultSave, sanitizeSave, type Save } from '../src/core/save/schema';
 
@@ -253,6 +253,36 @@ describe('restoreSave', () => {
       save: createDefaultSave(),
       writable: false,
       source: 'default',
+    });
+  });
+});
+
+describe('restoreAfterSignIn', () => {
+  const save = (rev: number, coins = 0): Save => ({ ...createDefaultSave(), rev, coins });
+
+  it('облако аккаунта важнее кэша гостя, даже если у гостя rev больше', () => {
+    expect(restoreAfterSignIn(save(3, 900), save(40, 10))).toEqual({
+      save: save(3, 900),
+      writable: true,
+      source: 'cloud',
+    });
+  });
+
+  it('пустое или битое облако — остаётся текущий прогресс', () => {
+    for (const cloud of [null, {}, 'мусор']) {
+      expect(restoreAfterSignIn(cloud, save(7, 50))).toEqual({
+        save: save(7, 50),
+        writable: true,
+        source: 'local',
+      });
+    }
+  });
+
+  it('облако от более новой версии игры не затирается', () => {
+    expect(restoreAfterSignIn({ v: 99 }, save(7))).toEqual({
+      save: save(7),
+      writable: false,
+      source: 'local',
     });
   });
 });

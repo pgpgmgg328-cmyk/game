@@ -4,6 +4,7 @@ import type { GameContext } from './context';
 import { e2eParams } from './e2eParams';
 import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
+import type { LeaderboardScene } from './scenes/Leaderboard';
 import type { MenuScene } from './scenes/Menu';
 import type { ShopScene } from './scenes/Shop';
 
@@ -77,6 +78,15 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     pressLogo: (row: number, index: number) => menuScene()?.debugPressLogo(row, index),
     /** Промотать бездействие в меню. */
     idle: (ms: number) => menuScene()?.debugIdle(ms),
+    /** Таблица рекордов: строки (без имён), надпись и кнопка входа. */
+    leaderboard: () => {
+      const scene = game.scene.getScene('Leaderboard') as LeaderboardScene | null;
+      return scene && scene.sys.isActive() ? scene.debugState() : null;
+    },
+    /** Вошёл ли игрок в Яндекс ID. */
+    authorized: () => ctx.platform.authorized,
+    /** Отправить отложенные сохранения в облако сразу. */
+    flushSaves: () => ctx.flushSaves(),
     /** Магазин: карточки товаров или надпись «недоступно». */
     shop: () => {
       const scene = game.scene.getScene('Shop') as ShopScene | null;

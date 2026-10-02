@@ -70,5 +70,19 @@ viewport.onChange((layout) => {
   game.events.emit(LAYOUT_EVENT, layout);
 });
 viewport.start();
-bindLifecycle(ctx, container);
+bindLifecycle(ctx, container, () => returnToMenu(game));
 installE2eHooks(game, ctx);
+
+/**
+ * Выход в главное меню из любого экрана: после окна выбора аккаунта прогресс другой
+ * (docs/yandex/sdk/sdk-events.md), открытые экраны показывают устаревшие данные.
+ */
+function returnToMenu(phaserGame: Phaser.Game): void {
+  const keep = new Set(['Boot', 'Background', 'Preload']);
+  for (const scene of phaserGame.scene.getScenes(false)) {
+    const key = scene.sys.settings.key;
+    if (keep.has(key)) continue;
+    if (scene.sys.isActive() || scene.sys.isPaused()) phaserGame.scene.stop(key);
+  }
+  phaserGame.scene.start('Menu');
+}
