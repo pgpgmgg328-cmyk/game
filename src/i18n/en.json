@@ -92,5 +92,14 @@
   "offer.remove.text": "You're out of removes. Watch an ad to get one more!",
   "offer.remove.watch": "Ad: +1 Remove",
   "result.double": "Ad: ×2 coins",
-  "result.doubled": "Coins doubled!"
+  "result.doubled": "Coins doubled!",
+  "common.loading": "Loading…",
+  "shop.unavailable": "Purchases are not available yet",
+  "shop.buy": "Buy",
+  "shop.owned": "Purchased",
+  "shop.thanks": "Thank you! Purchase received",
+  "shop.no_ads.title": "No ads",
+  "shop.no_ads.text": "Removes ads between runs and the banner. Rewarded ads stay optional.",
+  "shop.coins_1000.title": "1000 clacks",
+  "shop.coins_1000.text": "1000 coins for «+1» upgrades."
 }

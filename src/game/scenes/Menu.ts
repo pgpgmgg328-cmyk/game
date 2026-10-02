@@ -145,7 +145,11 @@ export class MenuScene extends BaseScene {
     if (this.ctx.pendingRun) this.openResume(this.ctx.pendingRun);
 
     // LoadingAPI.ready(): меню нарисовано и принимает ввод (п. 1.19.2). Повторные вызовы игнорируются.
-    this.game.events.once(Phaser.Core.Events.POST_RENDER, () => this.ctx.platform.ready());
+    // Стики-баннер — после этого и только без покупки «Без рекламы».
+    this.game.events.once(Phaser.Core.Events.POST_RENDER, () => {
+      this.ctx.platform.ready();
+      this.ctx.syncBanner();
+    });
   }
 
   override update(time: number, delta: number): void {

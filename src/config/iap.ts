@@ -27,3 +27,10 @@ export const IAP_PRODUCTS: readonly IapProduct[] = [
   { id: 'skins_pack', type: 'permanent', grants: { jarSkins: 3, backgrounds: 2 } },
   { id: 'coins_1000', type: 'consumable', grants: { coins: 1000 } },
 ];
+
+/**
+ * Что сейчас продаётся в магазине игры, по порядку. «Набор украшений» появится в магазине в M4
+ * вместе со скинами банки и фонами: без них покупка не соответствовала бы описанию (п. 1.13.5).
+ * Его выдача и восстановление из getPurchases() уже работают.
+ */
+export const SHOP_PRODUCT_IDS: readonly string[] = ['no_ads', 'coins_1000'];

@@ -13,17 +13,22 @@ export interface SaveBackend {
 
 export class SaveManager {
   private current: Save;
-  private readonly writable: boolean;
+  private readonly canWrite: boolean;
   private readonly backend: SaveBackend;
 
   constructor(restored: RestoredSave, backend: SaveBackend) {
     this.current = restored.save;
-    this.writable = restored.writable;
+    this.canWrite = restored.writable;
     this.backend = backend;
   }
 
   get data(): DeepReadonly<Save> {
     return this.current;
+  }
+
+  /** Изменения записываются (false — где-то лежит сохранение более новой версии игры). */
+  get writable(): boolean {
+    return this.canWrite;
   }
 
   /** Меняет сохранение и сразу записывает его (CLAUDE.md: сохраняем после каждого значимого действия). */
@@ -33,10 +38,10 @@ export class SaveManager {
     change(draft);
     draft.rev = this.current.rev + 1;
     this.current = draft;
-    if (this.writable) this.backend.persist(draft, urgency);
+    if (this.canWrite) this.backend.persist(draft, urgency);
   }
 
   flush(): void {
-    if (this.writable) this.backend.flush();
+    if (this.canWrite) this.backend.flush();
   }
 }

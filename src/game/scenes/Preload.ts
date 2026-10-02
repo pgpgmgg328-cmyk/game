@@ -70,6 +70,8 @@ export class PreloadScene extends BaseScene {
     ]);
     ctx.flags = parseFlags(flags);
     ctx.setSave(new SaveManager(restoreSave(sources), ctx.platform));
+    // Необработанные и постоянные покупки — при каждом запуске (п. 1.13.1). Меню не ждёт.
+    void ctx.purchases.restore();
     ctx.audio.setSettings(ctx.save.data.settings);
     // Прерванный забег: предложим продолжить, а битый или пустой снимок просто уберём.
     ctx.pendingRun = offerableSnapshot(

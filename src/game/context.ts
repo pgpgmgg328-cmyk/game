@@ -8,6 +8,7 @@ import type { SaveManager } from '../core/save/SaveManager';
 import { createTranslator, type Lang, type Translate } from '../i18n';
 import type { Platform } from '../platform';
 import { AdService } from './AdService';
+import { PurchaseService } from './PurchaseService';
 import type { Viewport } from './viewport';
 
 /** Ключ контекста в game.registry. */
@@ -24,6 +25,8 @@ export class GameContext {
   readonly audio = new AudioEngine();
   /** Показ рекламы: пауза и тишина на время показа, правила полноэкранной рекламы. */
   readonly ads: AdService;
+  /** Покупки: выдача, запись в облако, консумирование, восстановление при запуске. */
+  readonly purchases: PurchaseService;
   /** Игрок попросил браузер убрать лишнюю анимацию (prefers-reduced-motion). */
   readonly reducedMotion: boolean;
   lang: Lang = 'ru';
@@ -33,6 +36,8 @@ export class GameContext {
   flags: GameFlags = defaultFlags();
   t: Translate = createTranslator('ru');
   private saveManager: SaveManager | null = null;
+  /** Что последним сказали площадке о стики-баннере (null — ещё ничего). */
+  private bannerShown: boolean | null = null;
 
   constructor(platform: Platform, viewport: Viewport, reducedMotion: boolean) {
     this.platform = platform;
@@ -44,6 +49,11 @@ export class GameContext {
       noAds: () => this.saveLoaded && this.save.data.purchases.noAds,
       completedRuns: () => (this.saveLoaded ? this.save.data.stats.runs : 0),
       cooldownSec: () => this.flags.interstitialCooldownSec,
+    });
+    this.purchases = new PurchaseService({
+      platform,
+      save: () => this.save,
+      onGranted: () => this.syncBanner(),
     });
   }
 
@@ -73,6 +83,18 @@ export class GameContext {
   /** Немедленно отправить отложенные сохранения (пауза, скрытие вкладки). */
   flushSaves(): void {
     this.saveManager?.flush();
+  }
+
+  /**
+   * Стики-баннер (через API SDK): показан всем, кроме купивших «Без рекламы» (п. 1.13.5).
+   * Вызывается, когда меню готово, и после покупок.
+   */
+  syncBanner(): void {
+    if (!this.saveLoaded) return;
+    const visible = !this.save.data.purchases.noAds;
+    if (visible === this.bannerShown) return;
+    this.bannerShown = visible;
+    this.platform.setBannerVisible(visible);
   }
 }
 

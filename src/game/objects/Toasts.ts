@@ -4,7 +4,7 @@ import type { ButtonHost } from '../ui/Button';
 import { COLORS } from '../ui/theme';
 import { Keycap } from './Keycap';
 
-export type ToastIcon = { kind: 'key'; art: KeyArt } | { kind: 'medal' };
+export type ToastIcon = { kind: 'key'; art: KeyArt } | { kind: 'medal' } | { kind: 'coin' };
 
 export interface ToastContent {
   icon: ToastIcon;
@@ -167,9 +167,8 @@ export class Toasts {
       this.currentKey = key;
       parts.push(key);
     } else {
-      parts.push(
-        new Phaser.GameObjects.Image(scene, iconX, 0, UI_ART.medal).setDisplaySize(64, 64),
-      );
+      const texture = content.icon.kind === 'coin' ? UI_ART.coin : UI_ART.medal;
+      parts.push(new Phaser.GameObjects.Image(scene, iconX, 0, texture).setDisplaySize(64, 64));
     }
 
     // Длинное имя в узкой плашке уменьшается, чтобы не вылезать за край.

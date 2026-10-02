@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
   e2eCall,
+  e2eState,
   expectButtonsFit,
   expectNoPageScroll,
   openGame,
   patchSave,
   press,
   screenshot,
+  useFakeSdk,
   VETERAN_SAVE,
   waitRun,
   waitScene,
@@ -137,6 +139,28 @@ for (const size of SIZES) {
       await expectButtonsFit(page);
       if (size.allScreens) await screenshot(page, `result-ru-${name}`);
 
+      expect(problems).toEqual([]);
+    });
+
+    test('магазин помещается целиком, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(120_000);
+      const problems = watchConsole(page);
+      // Товары и цены приходят из каталога SDK: берём поддельный SDK.
+      await useFakeSdk(page);
+      await openGame(page, { seed: '7' });
+      await patchSave(page, { ...VETERAN_SAVE, coins: 1250 });
+      await press(page, 'menu.shop', size.mobile);
+      await waitScene(page, 'Shop');
+      await expect
+        .poll(async () => {
+          const shop = await e2eState<{ cards: { currencyIcon: boolean }[] } | null>(page, 'shop');
+          return (shop?.cards.length ?? 0) > 0 && shop!.cards.every((card) => card.currencyIcon);
+        })
+        .toBe(true);
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `shop-ru-${name}`);
       expect(problems).toEqual([]);
     });
 

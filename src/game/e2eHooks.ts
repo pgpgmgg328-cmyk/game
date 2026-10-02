@@ -5,6 +5,7 @@ import { e2eParams } from './e2eParams';
 import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
 import type { MenuScene } from './scenes/Menu';
+import type { ShopScene } from './scenes/Shop';
 
 export interface E2eButton {
   id: string;
@@ -76,6 +77,11 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     pressLogo: (row: number, index: number) => menuScene()?.debugPressLogo(row, index),
     /** Промотать бездействие в меню. */
     idle: (ms: number) => menuScene()?.debugIdle(ms),
+    /** Магазин: карточки товаров или надпись «недоступно». */
+    shop: () => {
+      const scene = game.scene.getScene('Shop') as ShopScene | null;
+      return scene && scene.sys.isActive() ? scene.debugState() : null;
+    },
     /** Всё сохранение: монеты, апгрейды, альбом, достижения. */
     save: () => (ctx.saveLoaded ? ctx.save.data : null),
     /**
