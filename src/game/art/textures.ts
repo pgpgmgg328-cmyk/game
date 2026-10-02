@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { UNIT } from '../../config/balance';
 import type { Lang } from '../../i18n';
-import { labelText, type FormData, type ThemeData } from '../../themes';
+import { finishOf, labelText, type FormData, type ThemeData } from '../../themes';
 import { heartPath, roundRectPath, starPath } from './canvas';
 import { FACE_FRAMES, drawFace, faceLayout, type FaceLayout } from './faceArt';
 import {
@@ -79,10 +79,18 @@ function keyLabel(form: FormData, lang: Lang): LabelArt {
   return { glyph: form.label.kind === 'glyph' ? form.label.glyph : 'crown' };
 }
 
+/** Постоянное число из строки: узор формы одинаковый при каждом запуске. */
+function hashString(text: string): number {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = (Math.imul(hash, 31) + text.charCodeAt(i)) >>> 0;
+  return hash;
+}
+
 /** Колпачок формы: обычный или золотой. Рисуется, только если такой текстуры ещё нет. */
 function ensureKeyTexture(
   scene: Phaser.Scene,
   key: string,
+  theme: ThemeData,
   form: FormData,
   lang: Lang,
   golden: boolean,
@@ -105,7 +113,12 @@ function ensureKeyTexture(
     PAD * TEXTURE_SCALE,
     PAD * TEXTURE_SCALE,
   );
-  drawKeycap(canvas.ctx, keycapGeometry(width, height), form.paint, keyLabel(form, lang), golden);
+  drawKeycap(canvas.ctx, keycapGeometry(width, height), form.paint, keyLabel(form, lang), {
+    golden,
+    finish: finishOf(theme, form),
+    decor: form.decor,
+    seed: hashString(theme.id) + form.tier * 7919,
+  });
   canvas.texture.refresh();
 }
 
@@ -131,7 +144,7 @@ export function ensureThemeArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang
       golden: false,
     };
 
-    ensureKeyTexture(scene, art.key, form, lang, false);
+    ensureKeyTexture(scene, art.key, theme, form, lang, false);
 
     if (!scene.textures.exists(art.face)) {
       const frameWidth = layout.frameWidth * TEXTURE_SCALE;
@@ -165,7 +178,7 @@ export function goldenArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang, art
   const form = theme.forms[art.tier - 1];
   if (!form) return art;
   const key = `${art.key}:gold`;
-  ensureKeyTexture(scene, key, form, lang, true);
+  ensureKeyTexture(scene, key, theme, form, lang, true);
   return { ...art, key, colors: keyColors(form.paint, true), golden: true };
 }
 

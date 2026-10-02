@@ -1,5 +1,6 @@
-import type { ThemePalette } from '../../themes';
-import { roundRectPath } from './canvas';
+import { Rng } from '../../core/run/rng';
+import type { ThemeBackdrop, ThemePalette } from '../../themes';
+import { roundRectPath, starPath } from './canvas';
 
 /**
  * Плитка узора: восемь клавиш в ряд, четыре ряда. Размер — степень двойки, чтобы WebGL повторял
@@ -51,6 +52,62 @@ function drawPatternKey(
   roundRectPath(ctx, x + 6, y + 5, w - 12, h - 17, 9);
   ctx.fillStyle = palette.pattern;
   ctx.fill();
+}
+
+/** Плитка украшений фона мира: звёздочки (космос) или цветная посыпка (сладкий мир). */
+export const SPARKLE_TILE = { width: 256, height: 256 } as const;
+
+/** Есть ли у мира украшения фона. */
+export function hasSparkles(backdrop: ThemeBackdrop): boolean {
+  return backdrop.stars !== undefined || (backdrop.sprinkles?.length ?? 0) > 0;
+}
+
+/** Звёздочки и точки разного размера или посыпка — всегда в одних и тех же местах плитки. */
+export function drawBackdropSparkles(ctx: CanvasRenderingContext2D, backdrop: ThemeBackdrop): void {
+  const { width, height } = SPARKLE_TILE;
+  const rng = new Rng(0x5eed);
+  // Фигурка у края рисуется и с другой стороны плитки: стык без шва.
+  const everywhere = (x: number, y: number, draw: (px: number, py: number) => void): void => {
+    for (const dx of [-width, 0, width])
+      for (const dy of [-height, 0, height]) draw(x + dx, y + dy);
+  };
+  if (backdrop.stars) {
+    ctx.fillStyle = backdrop.stars;
+    for (let i = 0; i < 26; i += 1) {
+      const x = rng.next() * width;
+      const y = rng.next() * height;
+      const big = i % 5 === 0;
+      const size = big ? 5 + rng.next() * 3 : 1 + rng.next() * 1.6;
+      ctx.globalAlpha = big ? 0.95 : 0.5 + rng.next() * 0.45;
+      everywhere(x, y, (px, py) => {
+        if (big) starPath(ctx, px, py, size, 4, 0.36);
+        else {
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      });
+    }
+  }
+  const sprinkles = backdrop.sprinkles ?? [];
+  if (sprinkles.length > 0) {
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 20; i += 1) {
+      const x = rng.next() * width;
+      const y = rng.next() * height;
+      const angle = rng.next() * Math.PI;
+      ctx.strokeStyle = sprinkles[i % sprinkles.length]!;
+      ctx.globalAlpha = 0.8;
+      everywhere(x, y, (px, py) => {
+        ctx.beginPath();
+        ctx.moveTo(px - Math.cos(angle) * 7, py - Math.sin(angle) * 7);
+        ctx.lineTo(px + Math.cos(angle) * 7, py + Math.sin(angle) * 7);
+        ctx.stroke();
+      });
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 
 /** Плитка ближнего слоя: редкие клавиши разного размера, чуть повёрнутые, как будто парят. */

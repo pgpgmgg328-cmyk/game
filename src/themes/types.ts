@@ -9,7 +9,7 @@ import type { Lang } from '../i18n';
 export type LocalizedText = Readonly<Record<Lang, string>>;
 
 /** Значки, которых нет в шрифте: их рисует код. */
-export type KeyGlyph = 'backspace' | 'crown';
+export type KeyGlyph = 'backspace' | 'crown' | 'heart';
 
 /** Надпись в углу клавиши: текст (может зависеть от языка) или нарисованный значок. */
 export type KeyLabel =
@@ -20,6 +20,30 @@ export type KeyLabel =
 export type KeyPaint =
   | { readonly kind: 'solid'; readonly color: string }
   | { readonly kind: 'rainbow'; readonly colors: readonly string[] };
+
+/**
+ * Отделка колпачка: пластик (мир 1), мармелад — полупрозрачный и блестящий (мир 2),
+ * космос — тёмный корпус со светящимся краем (мир 3).
+ */
+export type KeyFinish = 'plastic' | 'jelly' | 'cosmic';
+
+/**
+ * Узор поверх цвета клавиши. Лицо и надпись остаются чистыми: узор жмётся к краям.
+ * sprinkles — посыпка, drizzle — полоски глазури, chips — шоколадная крошка, stripes — полоски
+ * леденца на боку, drips — глазурь стекает с верха, cherry — вишенка в углу, stars — звёздочки,
+ * craters — кратеры, rings — кольцо планеты, swirl — завиток галактики.
+ */
+export type KeyDecor =
+  | 'sprinkles'
+  | 'drizzle'
+  | 'chips'
+  | 'stripes'
+  | 'drips'
+  | 'cherry'
+  | 'stars'
+  | 'craters'
+  | 'rings'
+  | 'swirl';
 
 export type EyeStyle =
   /** Обычные круглые глаза с бликом. */
@@ -54,8 +78,12 @@ export interface FaceData {
   readonly extras?: readonly FaceExtra[];
 }
 
-/** Вид звука при появлении формы (диздок, таблица форм, колонка «Звук»). */
-export type MergeSoundKind = 'pik' | 'tuk' | 'chpok' | 'clack' | 'whoosh' | 'fanfare';
+/**
+ * Вид звука при появлении формы (диздок, таблица форм, колонка «Звук»). boing — пружинка
+ * мармелада, bloop — пузырёк, twinkle — космический колокольчик.
+ */
+export type MergeSoundKind =
+  'pik' | 'tuk' | 'chpok' | 'clack' | 'whoosh' | 'fanfare' | 'boing' | 'bloop' | 'twinkle';
 
 export interface SoundData {
   readonly kind: MergeSoundKind;
@@ -77,8 +105,28 @@ export interface FormData {
   /** Размер в U, где U — ширина банки / 12. */
   readonly size: { readonly w: number; readonly h: number };
   readonly paint: KeyPaint;
+  /** Отделка; по умолчанию — отделка мира. */
+  readonly finish?: KeyFinish;
+  readonly decor?: KeyDecor;
   readonly face: FaceData;
   readonly sound: SoundData;
+}
+
+/**
+ * Особые клавиши мира (диздок, раздел 5). Это тоже модификаторы мира, поэтому их числа
+ * живут в данных мира, как упругость и гравитация.
+ */
+export interface WorldSpecials {
+  /**
+   * «Карамелька»: обычная клавиша в карамели. Коснувшись стенки банки, держится за неё
+   * holdMs, потом отлипает и дальше ведёт себя как обычная. chance — доля таких клавиш.
+   */
+  readonly caramel?: { readonly chance: number; readonly holdMs: number };
+  /**
+   * «Метеорчик»: раз в everyMs игры вместо клавиши. Игрок направляет его как обычно;
+   * клавиша, в которую он попал, мягко исчезает с блёстками. size — диаметр в U.
+   */
+  readonly meteor?: { readonly everyMs: number; readonly size: number };
 }
 
 /** Физика мира. Трение, демпфирование и прочее общее — в config/balance.ts. */
@@ -87,6 +135,27 @@ export interface WorldPhysics {
   readonly restitution: number;
   /** Множитель силы тяжести. */
   readonly gravityScale: number;
+}
+
+/**
+ * Музыка мира: короткий лёгкий мотив в петле (диздок, раздел 13). Ноты — номера MIDI
+ * (60 — до первой октавы), null — пауза; мелодия — восьмыми, бас — по ноте на четыре восьмых.
+ */
+export interface MusicData {
+  /** Удары в минуту (восьмая — половина удара). */
+  readonly bpm: number;
+  readonly melody: readonly (number | null)[];
+  readonly bass: readonly number[];
+  /** Тембр мелодии. */
+  readonly wave: 'sine' | 'triangle' | 'square';
+  /** Сколько звучит нота мелодии, с. */
+  readonly decay: number;
+}
+
+/** Украшения фона мира поверх градиента: звёздочки или цветная посыпка. */
+export interface ThemeBackdrop {
+  readonly stars?: string;
+  readonly sprinkles?: readonly string[];
 }
 
 /** Цвета банки и линий мира. */
@@ -113,8 +182,17 @@ export interface ThemeData {
   /** Постоянный латинский идентификатор мира (в сохранениях и именах текстур). */
   readonly id: string;
   readonly name: LocalizedText;
+  /** Короткое имя для вкладок альбома. */
+  readonly shortName: LocalizedText;
+  /** Чем мир особенный — одна короткая строка для экрана «Миры». */
+  readonly about: LocalizedText;
   readonly physics: WorldPhysics;
+  readonly specials: WorldSpecials;
+  /** Отделка клавиш мира (форма может задать свою). */
+  readonly finish: KeyFinish;
   readonly palette: ThemePalette;
+  readonly backdrop: ThemeBackdrop;
+  readonly music: MusicData;
   /** Формы по порядку тиров, от маленькой к Пробелу. */
   readonly forms: readonly FormData[];
 }

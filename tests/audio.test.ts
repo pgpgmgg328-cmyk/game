@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mixState, VoiceLimiter } from '../src/audio/mix';
-import { BASS, MELODY, MUSIC_STEP_SECONDS, midiToFrequency } from '../src/audio/music';
+import { midiToFrequency, stepSeconds } from '../src/audio/music';
+import { THEMES } from '../src/themes';
 
 const base = { sound: true, music: true, systemMuted: false, unlocked: true };
 
@@ -59,15 +60,33 @@ describe('музыка', () => {
     expect(midiToFrequency(60)).toBeCloseTo(261.63, 1);
   });
 
-  it('мелодия в до-мажорной пентатонике, петля ровными тактами', () => {
+  it('у каждого мира свой короткий мотив ровными тактами', () => {
+    const songs = new Set(THEMES.map((theme) => theme.music));
+    expect(songs.size).toBe(THEMES.length);
+    for (const theme of THEMES) {
+      const { melody, bass, bpm, decay } = theme.music;
+      expect(melody.length % 16, theme.id).toBe(0);
+      expect(bass.length * 4, theme.id).toBe(melody.length);
+      // Петля короче 15 с: короткий лёгкий мотив (диздок, раздел 13).
+      expect(melody.length * stepSeconds(theme.music), theme.id).toBeLessThan(15);
+      expect(bpm).toBeGreaterThanOrEqual(60);
+      expect(decay).toBeGreaterThan(0);
+      for (const note of [...melody, ...bass]) {
+        if (note === null) continue;
+        // Ноты в удобном диапазоне: от низкого баса до высокой мелодии.
+        expect(note).toBeGreaterThanOrEqual(33);
+        expect(note).toBeLessThanOrEqual(96);
+      }
+      expect(melody.filter((note) => note === null).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('мир 1 — в до-мажорной пентатонике', () => {
     const pentatonic = new Set([0, 2, 4, 7, 9]);
-    for (const note of [...MELODY, ...BASS]) {
+    const { melody, bass } = THEMES[0]!.music;
+    for (const note of [...melody, ...bass]) {
       if (note === null) continue;
       expect(pentatonic.has(note % 12) || note % 12 === 5).toBe(true);
     }
-    expect(MELODY.length % 16).toBe(0);
-    expect(BASS.length * 4).toBe(MELODY.length);
-    // Петля длиной меньше 15 с: короткий мотив.
-    expect(MELODY.length * MUSIC_STEP_SECONDS).toBeLessThan(15);
   });
 });

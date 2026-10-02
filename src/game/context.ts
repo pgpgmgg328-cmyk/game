@@ -10,6 +10,7 @@ import { SaveManager } from '../core/save/SaveManager';
 import type { Save } from '../core/save/schema';
 import { createTranslator, type Lang, type Translate } from '../i18n';
 import type { Platform } from '../platform';
+import { THEMES } from '../themes';
 import { AdService } from './AdService';
 import { PurchaseService } from './PurchaseService';
 import type { Viewport } from './viewport';
@@ -25,7 +26,7 @@ export class GameContext {
   readonly viewport: Viewport;
   readonly pause = new PauseController();
   /** Синтез звука и музыки (включается по первому жесту игрока). */
-  readonly audio = new AudioEngine();
+  readonly audio = new AudioEngine(THEMES[0]!.music);
   /** Показ рекламы: пауза и тишина на время показа, правила полноэкранной рекламы. */
   readonly ads: AdService;
   /** Покупки: выдача, запись в облако, консумирование, восстановление при запуске. */

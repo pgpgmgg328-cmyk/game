@@ -39,6 +39,20 @@ function clack(voice: Voice, pitch: number, volume: number, delay = 0): number {
   return Math.max(click, thock, bottom);
 }
 
+/** Космический колокольчик: чистый тон и неровный обертон, как у маленького колокола. */
+function twinkle(voice: Voice, pitch: number, volume: number, delay = 0): number {
+  const { ctx, out } = voice;
+  tone(ctx, out, { freq: pitch * 2.76, decay: 0.22, gain: 0.1 * volume, delay });
+  noise(ctx, out, voice.noise, {
+    filter: 'highpass',
+    freq: 6000,
+    decay: 0.08,
+    gain: 0.05 * volume,
+    delay,
+  });
+  return tone(ctx, out, { type: 'triangle', freq: pitch, decay: 0.36, gain: 0.36 * volume, delay });
+}
+
 /** Звук появления формы по данным мира (диздок, таблица форм, колонка «Звук»). */
 export function playForm(voice: Voice, sound: SoundData, pitchRatio: number): number {
   const { ctx, out } = voice;
@@ -109,6 +123,31 @@ export function playForm(voice: Voice, sound: SoundData, pitchRatio: number): nu
       break;
     case 'fanfare':
       length = fanfare(voice, pitch, volume);
+      break;
+    case 'boing':
+      // Пружинка мармелада: тон проседает и дрожит.
+      length = tone(ctx, out, {
+        freq: pitch * 1.5,
+        freqEnd: pitch * 0.75,
+        glide: 0.06,
+        decay: 0.24,
+        gain: 0.42 * volume,
+        vibrato: { rate: 16, depth: 0.07 },
+      });
+      break;
+    case 'bloop':
+      // Пузырёк: короткое скольжение снизу вверх.
+      length = tone(ctx, out, {
+        freq: pitch * 0.6,
+        freqEnd: pitch * 1.45,
+        glide: 0.07,
+        decay: 0.13,
+        gain: 0.5 * volume,
+      });
+      break;
+    case 'twinkle':
+      length = twinkle(voice, pitch, volume);
+      if (sound.echo) length = twinkle(voice, pitch, volume * 0.35, sound.echo);
       break;
   }
   // Маленький «поп» слияния поверх звука формы.

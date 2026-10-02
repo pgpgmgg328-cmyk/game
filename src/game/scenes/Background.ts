@@ -4,8 +4,11 @@ import { DEFAULT_THEME_ID, getTheme, THEMES, type ThemeData } from '../../themes
 import {
   FLOATING_TILE,
   PATTERN_TILE,
+  SPARKLE_TILE,
+  drawBackdropSparkles,
   drawFloatingKeys,
   drawKeyboardPattern,
+  hasSparkles,
 } from '../art/backgroundArt';
 import { LAYOUT_EVENT, getContext } from '../context';
 import { COLORS } from '../ui/theme';
@@ -13,6 +16,8 @@ import { COLORS } from '../ui/theme';
 /** Дальний слой — мелкая клавиатура, едва заметная; ближний — редкие парящие клавиши. */
 const KEYBOARD = { scale: 0.5, alpha: 0.22 } as const;
 const FLOATING = { scale: 1, alpha: 0.5, speed: 12, parallax: 56 } as const;
+/** Звёздочки и посыпка мира — между градиентом и клавиатурой. */
+const SPARKLES = { scale: 1, alpha: 0.85 } as const;
 const STATIC_KEY = 'bg-static';
 
 /**
@@ -126,6 +131,12 @@ export class BackgroundScene extends Phaser.Scene {
     ctx.fillRect(0, 0, width, height);
     // Узор в логических пикселях колонки: на телефоне и на мониторе клавиши одного размера.
     const unit = layout.scale / layout.dpr;
+    const { backdrop } = this.theme;
+    if (hasSparkles(backdrop)) {
+      const sparkles = (tile: CanvasRenderingContext2D): void =>
+        drawBackdropSparkles(tile, backdrop);
+      this.fillPattern(ctx, width, height, SPARKLE_TILE, sparkles, SPARKLES, unit);
+    }
     this.fillPattern(ctx, width, height, PATTERN_TILE, drawKeyboardPattern, KEYBOARD, unit);
     if (!this.floating) {
       this.fillPattern(ctx, width, height, FLOATING_TILE, drawFloatingKeys, FLOATING, unit);

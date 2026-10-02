@@ -1,3 +1,4 @@
+import type { MusicData } from '../themes';
 import { tone } from './synth';
 
 /** Частота ноты по номеру MIDI (69 — ля первой октавы, 440 Гц). */
@@ -5,66 +6,38 @@ export function midiToFrequency(note: number): number {
   return 440 * 2 ** ((note - 69) / 12);
 }
 
-/** Восьмая нота при темпе 104 удара в минуту. */
-export const MUSIC_STEP_SECONDS = 60 / 104 / 2;
+/** Длительность восьмой ноты песни, с. */
+export function stepSeconds(song: MusicData): number {
+  return 60 / song.bpm / 2;
+}
 
 /**
- * Мелодия: две фразы по 16 восьмых в до-мажорной пентатонике, null — пауза.
- * Короткий лёгкий мотив, который не надоедает в петле (диздок, раздел 13).
+ * Тихая музыкальная петля мира (диздок, раздел 13): у каждого мира свой мотив в themes/.
+ * Ноты планируются чуть заранее по часам AudioContext.
  */
-export const MELODY: readonly (number | null)[] = [
-  72,
-  null,
-  76,
-  79,
-  81,
-  null,
-  79,
-  76,
-  74,
-  null,
-  76,
-  79,
-  76,
-  null,
-  72,
-  null,
-  74,
-  null,
-  76,
-  79,
-  84,
-  null,
-  81,
-  79,
-  76,
-  null,
-  74,
-  76,
-  72,
-  null,
-  null,
-  null,
-];
-
-/** Бас: одна нота на каждые 4 восьмые. */
-export const BASS: readonly number[] = [48, 48, 45, 45, 41, 41, 43, 43];
-
-/** Тихая музыкальная петля. Ноты планируются чуть заранее по часам AudioContext. */
 export class MusicLoop {
   private readonly ctx: BaseAudioContext;
   private readonly out: AudioNode;
+  private song: MusicData;
   private timer: number | null = null;
   private step = 0;
   private nextTime = 0;
 
-  constructor(ctx: BaseAudioContext, out: AudioNode) {
+  constructor(ctx: BaseAudioContext, out: AudioNode, song: MusicData) {
     this.ctx = ctx;
     this.out = out;
+    this.song = song;
   }
 
   get playing(): boolean {
     return this.timer !== null;
+  }
+
+  /** Сменить мотив (сменился мир): новый начинается с начала, со следующей восьмой. */
+  setSong(song: MusicData): void {
+    if (song === this.song) return;
+    this.song = song;
+    this.step = 0;
   }
 
   start(): void {
@@ -85,28 +58,31 @@ export class MusicLoop {
     const horizon = this.ctx.currentTime + 0.25;
     while (this.nextTime < horizon) {
       this.playStep(this.step, this.nextTime);
-      this.nextTime += MUSIC_STEP_SECONDS;
-      this.step = (this.step + 1) % MELODY.length;
+      this.nextTime += stepSeconds(this.song);
+      this.step = (this.step + 1) % Math.max(1, this.song.melody.length);
     }
   }
 
   private playStep(step: number, at: number): void {
-    const note = MELODY[step];
+    const { melody, bass, wave, decay } = this.song;
+    const note = melody[step];
     if (note !== null && note !== undefined) {
       tone(this.ctx, this.out, {
-        type: 'triangle',
+        type: wave,
         freq: midiToFrequency(note),
         attack: 0.01,
-        decay: 0.3,
-        gain: 0.5,
+        decay,
+        // Квадратная волна громче остальных: её делаем тише.
+        gain: wave === 'square' ? 0.25 : 0.5,
+        lowpass: wave === 'square' ? 2400 : undefined,
         at,
       });
     }
     if (step % 4 === 0) {
-      const bass = BASS[(step / 4) % BASS.length];
-      if (bass !== undefined) {
+      const root = bass[(step / 4) % Math.max(1, bass.length)];
+      if (root !== undefined) {
         tone(this.ctx, this.out, {
-          freq: midiToFrequency(bass),
+          freq: midiToFrequency(root),
           attack: 0.02,
           decay: 0.6,
           gain: 0.6,

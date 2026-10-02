@@ -1,6 +1,6 @@
 import { semitoneRatio } from '../core/run/combo';
 import type { Settings } from '../core/save/schema';
-import type { SoundData } from '../themes';
+import type { MusicData, SoundData } from '../themes';
 import { mixState, VoiceLimiter, type MixInput } from './mix';
 import { MusicLoop } from './music';
 import {
@@ -54,6 +54,8 @@ export class AudioEngine {
   private musicBus: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   private music: MusicLoop | null = null;
+  /** Мотив текущего мира: меню и забег ставят музыку своего мира. */
+  private song: MusicData;
   private readonly limiter = new VoiceLimiter(MAX_VOICES);
   private readonly input: MixInput = {
     sound: true,
@@ -61,6 +63,16 @@ export class AudioEngine {
     systemMuted: false,
     unlocked: false,
   };
+
+  constructor(song: MusicData) {
+    this.song = song;
+  }
+
+  /** Музыка мира: сменился мир — со следующей восьмой играет его мотив. */
+  setMusic(song: MusicData): void {
+    this.song = song;
+    this.music?.setSong(song);
+  }
 
   /** Ждать жеста игрока, чтобы создать или возобновить AudioContext. */
   bindUnlock(target: Window): () => void {
@@ -190,7 +202,7 @@ export class AudioEngine {
         this.musicBus.gain.value = 0;
         this.musicBus.connect(master);
         this.noiseBuffer = createNoiseBuffer(ctx);
-        this.music = new MusicLoop(ctx, this.musicBus);
+        this.music = new MusicLoop(ctx, this.musicBus, this.song);
         this.ctx = ctx;
         this.input.unlocked = true;
       } catch {
