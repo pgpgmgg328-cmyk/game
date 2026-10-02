@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DROP, JAR, NEW_FORM, RUN, SPAWN, SQUISH, TUTORIAL } from '../../config/balance';
+import { ADS, DROP, JAR, NEW_FORM, RUN, SPAWN, SQUISH, TUTORIAL } from '../../config/balance';
 import { actionForKey } from '../../core/input';
 import {
   earnedAchievements,
@@ -29,13 +29,20 @@ import { FormReveal, type RevealKind } from '../objects/FormReveal';
 import { AimGuide, JarView } from '../objects/Jar';
 import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
-import { HUD_SIDE_ROOM, HUD_TOOLS_HEIGHT, HUD_TOP_HEIGHT, RunHud } from '../objects/RunHud';
+import {
+  HUD_SIDE_ROOM,
+  HUD_TOOLS_HEIGHT,
+  HUD_TOP_HEIGHT,
+  RunHud,
+  type HudTools,
+} from '../objects/RunHud';
 import { Toasts } from '../objects/Toasts';
 import { TutorialHand, type HintKind } from '../objects/TutorialHand';
 import { phaserMatter } from '../run/phaserMatter';
-import { Run, type RunEvent, type RunKey } from '../run/Run';
+import { Run, type RunEvent, type RunKey, type ToolId } from '../run/Run';
 import type { BackgroundScene } from './Background';
 import { BaseScene } from './BaseScene';
+import type { OfferData } from './Offer';
 import { titleStyle } from './titleStyle';
 
 export interface GameSceneData {
@@ -128,6 +135,8 @@ export class GameScene extends BaseScene {
   private jarBaseX = 0;
   private shakeOffset = 0;
   private removeMode = false;
+  /** Открыто предложение «Второй шанс»: банка переполнена, игрок решает. */
+  private offering = false;
   private cheerPending = false;
   /** Обучение первого забега: рука «веди → отпусти», пока не случится первое слияние. */
   private dragTutorial = false;
@@ -184,11 +193,11 @@ export class GameScene extends BaseScene {
       },
       {
         onPause: () => this.openPause(),
-        onShake: () => this.useShake(),
-        onRemove: () => this.setRemoveMode(!this.removeMode),
+        onShake: () => this.onShakeButton(),
+        onRemove: () => this.onRemoveButton(),
       },
     );
-    this.hud.setCharges(charges.shakes, charges.removes);
+    this.hud.setCharges(charges.shakes, charges.removes, this.toolOffers());
     this.coinFlights = new CoinFlights(this, ctx.reducedMotion);
     this.reveal = new FormReveal(this, ctx.reducedMotion);
     this.toasts = new Toasts(this, ctx.reducedMotion);
@@ -318,6 +327,7 @@ export class GameScene extends BaseScene {
     this.achievements = [];
     this.shakeOffset = 0;
     this.removeMode = false;
+    this.offering = false;
     this.cheerPending = false;
     this.idleMs = 0;
     this.ending = false;
@@ -533,13 +543,21 @@ export class GameScene extends BaseScene {
         this.onShake();
         break;
       case 'remove':
-        this.onRemove(event.key);
+        this.updateCharges();
+        this.poofKey(event.key);
+        break;
+      case 'revive':
+        event.removed.forEach((key) => this.poofKey(key));
+        break;
+      case 'charge':
+        this.updateCharges();
+        this.bumpTool(event.tool);
         break;
       case 'danger':
         this.danger.setWarning(event.warning);
         break;
       case 'gameover':
-        this.endRun();
+        this.onOverflow();
         break;
     }
   }
@@ -602,8 +620,7 @@ export class GameScene extends BaseScene {
 
   /** «Встряска»: банка качается, клавиши подпрыгивают. */
   private onShake(): void {
-    const { shakes, removes } = this.run.charges;
-    this.hud.setCharges(shakes, removes);
+    this.updateCharges();
     this.ctx.audio.shake();
     this.views.forEach((view) => view.squash(0.5));
     if (this.ctx.reducedMotion) return;
@@ -621,10 +638,8 @@ export class GameScene extends BaseScene {
     });
   }
 
-  /** «Удаление»: клавиша исчезает с «пуф». */
-  private onRemove(key: RunKey): void {
-    const { shakes, removes } = this.run.charges;
-    this.hud.setCharges(shakes, removes);
+  /** Клавиша исчезает с «пуф» («Удаление», «Второй шанс»). */
+  private poofKey(key: RunKey): void {
     const view = this.views.get(key.id);
     this.views.delete(key.id);
     this.lastImpact.delete(key.id);
@@ -649,6 +664,129 @@ export class GameScene extends BaseScene {
 
   // ── Инструменты ──────────────────────────────────────────────────────────────────────
 
+  /** За рекламу можно получить ещё заряд: заряды кончились, а бонус в забеге ещё не брали. */
+  private toolOffers(): HudTools {
+    return { shake: this.run.canAddCharge('shake'), remove: this.run.canAddCharge('remove') };
+  }
+
+  private updateCharges(): void {
+    const { shakes, removes } = this.run.charges;
+    this.hud.setCharges(shakes, removes, this.toolOffers());
+  }
+
+  private onShakeButton(): void {
+    if (this.run.charges.shakes === 0 && this.run.canAddCharge('shake')) this.offerCharge('shake');
+    else this.useShake();
+  }
+
+  private onRemoveButton(): void {
+    if (!this.removeMode && this.run.charges.removes === 0 && this.run.canAddCharge('remove')) {
+      this.offerCharge('remove');
+    } else {
+      this.setRemoveMode(!this.removeMode);
+    }
+  }
+
+  /** Кнопка инструмента «подпрыгивает», когда в ней появился заряд. */
+  private bumpTool(tool: ToolId): void {
+    const button = tool === 'shake' ? this.hud.shake : this.hud.remove;
+    if (!button || this.ctx.reducedMotion) return;
+    this.tweens.killTweensOf(button);
+    button.setScale(1.2);
+    this.tweens.add({ targets: button, scale: 1, duration: 320, ease: 'Back.easeOut' });
+  }
+
+  // ── Реклама за награду ───────────────────────────────────────────────────────────────
+
+  /** Окно «за рекламу» поверх забега (сцена Offer). */
+  private openOffer(data: OfferData): void {
+    this.gesture = null;
+    this.held.clear();
+    this.scene.launch('Offer', data);
+  }
+
+  /**
+   * Заряды кончились: «+1 Встряска» или «+1 Удаление» за рекламу, раз за забег на каждый
+   * инструмент (диздок, раздел 8). Пока окно открыто, забег на паузе.
+   */
+  private offerCharge(tool: ToolId): void {
+    if (this.ending || this.offering || this.halted) return;
+    const { t } = this.ctx;
+    const texts =
+      tool === 'shake'
+        ? {
+            title: t('offer.shake.title'),
+            text: t('offer.shake.text'),
+            watch: t('offer.shake.watch'),
+          }
+        : {
+            title: t('offer.remove.title'),
+            text: t('offer.remove.text'),
+            watch: t('offer.remove.watch'),
+          };
+    this.setRemoveMode(false);
+    this.ctx.pause.setUserPaused(true);
+    const resume = (): void => this.ctx.pause.setUserPaused(false);
+    this.openOffer({
+      kind: tool,
+      title: texts.title,
+      text: texts.text,
+      watchLabel: texts.watch,
+      declineLabel: t('offer.decline'),
+      // Заряд выдаётся только в колбэке onRewarded.
+      watch: () => this.ctx.ads.rewarded(() => this.run.addCharge(tool)),
+      onDone: resume,
+      onDecline: resume,
+    });
+  }
+
+  /** Банка переполнена: «Второй шанс» за рекламу (раз за забег) или сразу конец забега. */
+  private onOverflow(): void {
+    if (!this.ctx.flags.secondChanceEnabled || !this.run.canRevive) {
+      this.endRun();
+      return;
+    }
+    const { ctx } = this;
+    this.setRemoveMode(false);
+    this.offering = true;
+    this.gesture = null;
+    this.held.clear();
+    this.hud.setControlsVisible(false);
+    // Пока игрок решает, забег не идёт: разметка геймплея остановлена.
+    ctx.pause.setRunActive(false);
+    ctx.audio.gameOver();
+    this.openOffer({
+      kind: 'secondChance',
+      title: ctx.t('game.overflow'),
+      text: ctx.t('offer.secondChance.text', { count: ADS.secondChanceKeys }),
+      watchLabel: ctx.t('offer.secondChance.watch'),
+      declineLabel: ctx.t('offer.secondChance.decline'),
+      // Верхние клавиши убираются только в колбэке onRewarded.
+      watch: () => ctx.ads.rewarded(() => this.run.revive(ADS.secondChanceKeys)),
+      onDone: () => this.continueAfterRevive(),
+      onDecline: () => {
+        this.offering = false;
+        this.endRun(false);
+      },
+    });
+  }
+
+  /** «Второй шанс» получен: забег продолжается. */
+  private continueAfterRevive(): void {
+    this.offering = false;
+    if (this.run.over) {
+      // Реклама засчитана, но забег не ожил (так не бывает): просто заканчиваем.
+      this.endRun(false);
+      return;
+    }
+    this.hud.setControlsVisible(true);
+    this.updateCharges();
+    this.updatePauseButton();
+    if (!this.hanging) this.showHanging(true);
+    this.ctx.pause.setRunActive(true);
+    this.saveSnapshot();
+  }
+
   private useShake(): void {
     if (this.halted || this.ending) return;
     this.setRemoveMode(false);
@@ -671,7 +809,12 @@ export class GameScene extends BaseScene {
   private updateHints(delta: number): void {
     const { hand } = this;
     const busy =
-      this.halted || this.ending || this.removeMode || this.gesture !== null || this.held.size > 0;
+      this.halted ||
+      this.ending ||
+      this.offering ||
+      this.removeMode ||
+      this.gesture !== null ||
+      this.held.size > 0;
     if (busy) {
       this.idleMs = 0;
       if (hand.kind === 'drag' || (this.halted && hand.kind === 'tap')) hand.hide();
@@ -891,7 +1034,8 @@ export class GameScene extends BaseScene {
 
   // ── Конец забега ─────────────────────────────────────────────────────────────────────
 
-  private endRun(): void {
+  /** Конец забега: итоги в сохранение и экран результата. playSound — звук уже был при переполнении. */
+  private endRun(playSound = true): void {
     if (this.ending) return;
     this.setRemoveMode(false);
     this.ending = true;
@@ -901,7 +1045,7 @@ export class GameScene extends BaseScene {
     this.hanging = null;
     this.hud.hideControls();
     this.ctx.pause.setRunActive(false);
-    this.ctx.audio.gameOver();
+    if (playSound) this.ctx.audio.gameOver();
 
     const { ctx } = this;
     ctx.platform.saveRunSnapshot(null);
@@ -993,7 +1137,7 @@ export class GameScene extends BaseScene {
     this.input.on(
       Events.POINTER_DOWN,
       (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-        if (over.length > 0 || this.gesture || this.ending || this.halted) return;
+        if (over.length > 0 || this.gesture || this.ending || this.halted || this.offering) return;
         const point = this.toJar(pointer);
         const slop = pointer.wasTouch ? SQUISH.touchSlop : 0;
         const key = this.run.keyAt(point.x, point.y, slop);
@@ -1013,7 +1157,7 @@ export class GameScene extends BaseScene {
       },
     );
     this.input.on(Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
-      if (this.ending || this.halted || this.removeMode) return;
+      if (this.ending || this.halted || this.removeMode || this.offering) return;
       const aiming = this.gesture?.kind === 'aim' && this.gesture.pointerId === pointer.id;
       // Мышью прицел ведётся и без нажатия, пальцем — пока палец на экране.
       const hovering = !this.gesture && !pointer.wasTouch && !pointer.isDown;
@@ -1036,7 +1180,7 @@ export class GameScene extends BaseScene {
         this.held.add(action);
         return;
       }
-      if (event.repeat || this.ending) return;
+      if (event.repeat || this.ending || this.offering) return;
       if (action === 'pause') {
         this.openPause();
         return;
@@ -1064,8 +1208,7 @@ export class GameScene extends BaseScene {
     this.addCleanup(
       pause.subscribe({
         onPausedChange: (paused) => {
-          // Пока открыт экран паузы, своя кнопка паузы не нужна и не должна выглядывать из-под окна.
-          this.hud.pause.setVisible(!pause.isUserPaused && !this.ending);
+          this.updatePauseButton();
           if (paused) {
             // Отпущенные во время паузы клавиши и пальцы не должны «залипнуть».
             this.held.clear();
@@ -1087,8 +1230,13 @@ export class GameScene extends BaseScene {
     });
   }
 
+  /** Пока открыт экран паузы или «Второй шанс», своя кнопка паузы не нужна и не выглядывает из-под окна. */
+  private updatePauseButton(): void {
+    this.hud.pause.setVisible(!this.ctx.pause.isUserPaused && !this.ending && !this.offering);
+  }
+
   private openPause(): void {
-    if (this.ending) return;
+    if (this.ending || this.offering) return;
     this.setRemoveMode(false);
     this.ctx.pause.setUserPaused(true);
     this.scene.launch('Pause');
@@ -1112,6 +1260,8 @@ export class GameScene extends BaseScene {
     coins: number;
     shownCoins: number;
     charges: { shakes: number; removes: number };
+    bonuses: { revive: boolean; shake: boolean; remove: boolean };
+    offering: boolean;
     removeMode: boolean;
     reveal: RevealKind | null;
     revealMs: number;
@@ -1140,6 +1290,8 @@ export class GameScene extends BaseScene {
       coins: this.run.getStats().coins,
       shownCoins: this.shownCoins,
       charges: this.run.charges,
+      bonuses: { ...this.run.bonuses },
+      offering: this.offering,
       removeMode: this.removeMode,
       reveal: this.reveal.kind,
       revealMs: Math.round(this.reveal.elapsedMs),

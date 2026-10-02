@@ -10,6 +10,8 @@ export interface E2eButton {
   id: string;
   label: string;
   scene: string;
+  /** Кнопка бледная и не срабатывает (например, заряды кончились). */
+  disabled: boolean;
   /** Прямоугольник кнопки в CSS-пикселях окна. */
   x: number;
   y: number;
@@ -118,6 +120,7 @@ function collectButtons(game: Phaser.Game, ctx: GameContext): E2eButton[] {
         id: button.id,
         label: button.text,
         scene: scene.sys.settings.key,
+        disabled: button.isDisabled,
         x: canvas.left + ((bounds.x - camera.scrollX) * camera.zoom) / dpr,
         y: canvas.top + ((bounds.y - camera.scrollY) * camera.zoom) / dpr,
         width: (bounds.width * camera.zoom) / dpr,

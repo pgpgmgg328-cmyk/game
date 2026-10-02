@@ -5,6 +5,7 @@ export interface E2eButton {
   id: string;
   label: string;
   scene: string;
+  disabled: boolean;
   x: number;
   y: number;
   width: number;
@@ -184,6 +185,8 @@ export interface E2eRunState {
   coins: number;
   shownCoins: number;
   charges: { shakes: number; removes: number };
+  bonuses: { revive: boolean; shake: boolean; remove: boolean };
+  offering: boolean;
   removeMode: boolean;
   reveal: 'form' | 'legendary' | null;
   revealMs: number;

@@ -10,6 +10,7 @@ import { BootScene } from './game/scenes/Boot';
 import { GameScene } from './game/scenes/Game';
 import { LeaderboardScene } from './game/scenes/Leaderboard';
 import { MenuScene } from './game/scenes/Menu';
+import { OfferScene } from './game/scenes/Offer';
 import { PauseScene } from './game/scenes/Pause';
 import { PreloadScene } from './game/scenes/Preload';
 import { ResultScene } from './game/scenes/Result';
@@ -59,6 +60,7 @@ const game = new Phaser.Game({
     LeaderboardScene,
     SettingsScene,
     PauseScene,
+    OfferScene,
   ],
 });
 

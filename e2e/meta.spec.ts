@@ -126,9 +126,11 @@ test.describe('мета в забеге', () => {
     await waitRun(page, (s) => s.charges.shakes === 0);
     // Клавиши подпрыгнули.
     await waitRun(page, (s) => s.keys.some((key, i) => key.y < before.keys[i]!.y - 2), 5_000);
-    // Зарядов нет: кнопка на месте, но нажатие ничего не делает.
+    // Зарядов нет: кнопка предлагает «+1 Встряска» за рекламу (раз за забег). Отказываемся.
     await press(page, 'game.shake', true);
-    await page.waitForTimeout(200);
+    await waitScene(page, 'Offer');
+    await press(page, 'offer.decline', true);
+    await waitScene(page, 'Game');
     expect((await runState(page)).charges.shakes).toBe(0);
 
     await e2eCall(page, 'step', 120);

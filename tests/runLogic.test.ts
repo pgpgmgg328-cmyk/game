@@ -241,7 +241,7 @@ describe('комбо и перезарядка', () => {
 describe('снимок забега', () => {
   const limits = { maxTier: 11, maxKeys: 150 };
   const valid: RunSnapshot = {
-    v: 2,
+    v: 3,
     world: 'classic',
     seed: 12345,
     rng: 4000000000,
@@ -259,11 +259,21 @@ describe('снимок забега', () => {
     modifiers: { jarWidth: 612, preview: 1, squishPower: 1.2, goldenChance: 0.03 },
     shakes: 1,
     removes: 0,
+    adBonuses: { revive: true, shake: false, remove: true },
     keys: [{ tier: 3, golden: true, x: 100.25, y: 700, angle: 0.1, vx: 0, vy: -0.5, spin: 0 }],
   };
 
   it('правильный снимок читается как есть', () => {
     expect(readRunSnapshot(JSON.parse(JSON.stringify(valid)), limits)).toEqual(valid);
+  });
+
+  it('снимок v2 (до бонусов за рекламу) читается: бонусов ещё не было', () => {
+    const { adBonuses: _bonuses, ...rest } = valid;
+    const old = { ...rest, v: 2 };
+    expect(readRunSnapshot(old, limits)).toEqual({
+      ...valid,
+      adBonuses: { revive: false, shake: false, remove: false },
+    });
   });
 
   it('продолжить предлагается только целый забег известного мира, где уже был сброс', () => {
@@ -303,6 +313,9 @@ describe('снимок забега', () => {
       { ...valid, keys: [{ ...valid.keys[0], x: Number.POSITIVE_INFINITY }] },
       { ...valid, keys: [{ ...valid.keys[0], vy: 5000 }] },
       { ...valid, keys: new Array(151).fill(valid.keys[0]) },
+      { ...valid, adBonuses: null },
+      { ...valid, adBonuses: { revive: 'да', shake: false, remove: false } },
+      { ...valid, v: 4 },
     ];
     broken.forEach((raw) => expect(readRunSnapshot(raw, limits)).toBeNull());
   });

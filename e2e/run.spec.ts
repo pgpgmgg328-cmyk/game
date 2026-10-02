@@ -132,6 +132,13 @@ test.describe('забег (мышь, десктоп)', () => {
     await e2eCall(page, 'placeKey', 3, 200, 760);
     await e2eCall(page, 'placeKey', 3, 270, 760);
     await buildTower(page);
+    // Банка переполнена: сначала по желанию «Второй шанс» за рекламу. Отказываемся.
+    await waitScene(page, 'Offer', 30_000);
+    expect(await e2eState(page, 'gameplayActive')).toBe(false);
+    // Физика уже стоит: счёт в момент переполнения больше не меняется.
+    const { score } = await runState(page);
+    expect(score).toBeGreaterThanOrEqual(20);
+    await press(page, 'offer.decline');
     await page.waitForFunction(
       () =>
         (window as unknown as { __e2e: { run(): { ending: boolean } | null } }).__e2e.run()
@@ -139,10 +146,6 @@ test.describe('забег (мышь, десктоп)', () => {
       undefined,
       { timeout: 20_000 },
     );
-    expect(await e2eState(page, 'gameplayActive')).toBe(false);
-    // Башня может ещё качнуться и дать слияние, поэтому рекорд сверяем со счётом в момент конца.
-    const { score } = await runState(page);
-    expect(score).toBeGreaterThanOrEqual(20);
     await waitScene(page, 'Result', 45_000);
     expect(await e2eCall(page, 'stats')).toMatchObject({ bestScore: score, runs: 1 });
     // Снимок забега больше не нужен: после перезагрузки «Продолжить?» не спросят.

@@ -1,8 +1,8 @@
 import { isJsonObject } from '../save/schema';
 import type { QueueItem } from './spawn';
 
-/** Версия формата снимка. При изменении формата старые снимки просто не предлагаются. */
-export const RUN_SNAPSHOT_VERSION = 2;
+/** Версия формата снимка. Снимки v2 тоже читаются: в них ещё не было бонусов за рекламу. */
+export const RUN_SNAPSHOT_VERSION = 3;
 
 /** Клавиша в банке: тир, золотая ли, положение, поворот и скорости. */
 export interface KeySnapshot {
@@ -23,6 +23,18 @@ export interface SnapshotModifiers {
   squishPower: number;
   goldenChance: number;
 }
+
+/** Бонусы забега за рекламу: каждый — не больше раза за забег (диздок, раздел 8). */
+export interface AdBonuses {
+  /** «Второй шанс» уже был. */
+  revive: boolean;
+  /** «+1 Встряска» за рекламу уже была. */
+  shake: boolean;
+  /** «+1 Удаление» за рекламу уже было. */
+  remove: boolean;
+}
+
+export const NO_AD_BONUSES: Readonly<AdBonuses> = { revive: false, shake: false, remove: false };
 
 /**
  * Снимок текущего забега (CLAUDE.md, «Сохранения»): позиции, тиры, счёт, seed.
@@ -57,6 +69,8 @@ export interface RunSnapshot {
   /** Оставшиеся заряды «Встряски» и «Удаления». */
   shakes: number;
   removes: number;
+  /** Какие бонусы за рекламу уже взяты: после перезагрузки их не дадут второй раз. */
+  adBonuses: AdBonuses;
   keys: KeySnapshot[];
 }
 
@@ -103,6 +117,17 @@ function readKey(raw: unknown, maxTier: number): KeySnapshot | null {
   return { ...item, x, y, angle, vx, vy, spin };
 }
 
+/** Бонусы за рекламу; в снимке v2 их ещё не было — значит, не брались. */
+function readAdBonuses(raw: unknown): AdBonuses | null {
+  if (raw === undefined) return { ...NO_AD_BONUSES };
+  if (!isJsonObject(raw)) return null;
+  const { revive, shake, remove } = raw;
+  if (typeof revive !== 'boolean' || typeof shake !== 'boolean' || typeof remove !== 'boolean') {
+    return null;
+  }
+  return { revive, shake, remove };
+}
+
 function readModifiers(raw: unknown): SnapshotModifiers | null {
   if (!isJsonObject(raw)) return null;
   const { jarWidth, preview, squishPower, goldenChance } = raw;
@@ -118,7 +143,7 @@ function readModifiers(raw: unknown): SnapshotModifiers | null {
  * тогда игра просто не предлагает продолжить забег и не падает.
  */
 export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapshot | null {
-  if (!isJsonObject(raw) || raw.v !== RUN_SNAPSHOT_VERSION) return null;
+  if (!isJsonObject(raw) || (raw.v !== 2 && raw.v !== RUN_SNAPSHOT_VERSION)) return null;
   const { world, seed, rng, score, elapsedMs, drops, merges, goldenMerges, megas, coins } = raw;
   if (typeof world !== 'string' || world === '') return null;
   if (!isUint32(seed) || !isUint32(rng)) return null;
@@ -137,6 +162,8 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
   if (!isWithin(raw.aimX, MAX_COORDINATE)) return null;
   const modifiers = readModifiers(raw.modifiers);
   if (!modifiers) return null;
+  const adBonuses = readAdBonuses(raw.v === 2 ? undefined : raw.adBonuses);
+  if (!adBonuses) return null;
   if (!Array.isArray(raw.keys) || raw.keys.length > limits.maxKeys) return null;
 
   const keys: KeySnapshot[] = [];
@@ -164,6 +191,7 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
     modifiers,
     shakes: raw.shakes as number,
     removes: raw.removes as number,
+    adBonuses,
     keys,
   };
 }

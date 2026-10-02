@@ -8,6 +8,7 @@ import {
   press,
   screenshot,
   VETERAN_SAVE,
+  waitRun,
   waitScene,
   watchConsole,
 } from './helpers';
@@ -80,6 +81,8 @@ for (const size of SIZES) {
     });
 
     test('альбом и апгрейды помещаются целиком, скриншоты', async ({ page }) => {
+      // На 768×1024 при DPR 2 без видеокарты кадры рисуются медленно, в параллельном прогоне — ещё медленнее.
+      test.setTimeout(120_000);
       const problems = watchConsole(page);
       await openGame(page, { lang: 'ru', seed: '7' });
       await patchSave(page, {
@@ -134,6 +137,44 @@ for (const size of SIZES) {
       await expectButtonsFit(page);
       if (size.allScreens) await screenshot(page, `result-ru-${name}`);
 
+      expect(problems).toEqual([]);
+    });
+
+    test('предложения за рекламу и «×2 монеты» помещаются, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(240_000);
+      const problems = watchConsole(page);
+      await openGame(page, { lang: 'ru', seed: '7' });
+      await patchSave(page, { ...VETERAN_SAVE, upgrades: { shake: 1, remove: 1 } });
+      await press(page, 'menu.play', size.mobile);
+      await waitScene(page, 'Game');
+      // Две Стрелочки сольются: за забег будут монеты и кнопка «×2» на экране результата.
+      await e2eCall(page, 'placeKey', 5, 250, 740);
+      await e2eCall(page, 'placeKey', 5, 340, 740);
+      await press(page, 'game.shake', size.mobile);
+      await waitRun(page, (state) => state.charges.shakes === 0 && state.coins > 0);
+      await press(page, 'game.shake', size.mobile);
+      await waitScene(page, 'Offer');
+      await expectButtonsFit(page);
+      await screenshot(page, `offer-tool-ru-${name}`);
+      await press(page, 'offer.decline', size.mobile);
+      await waitScene(page, 'Game');
+
+      let y = 800;
+      for (let i = 0; i < 10; i += 1) {
+        const tier = i % 2 === 0 ? 5 : 4;
+        const height = tier === 5 ? 100 : 85;
+        await e2eCall(page, 'placeKey', tier, 470, y - height / 2 - 1);
+        y -= height + 2;
+      }
+      await waitScene(page, 'Offer', 60_000);
+      await expectButtonsFit(page);
+      await screenshot(page, `offer-chance-ru-${name}`);
+      await press(page, 'offer.decline', size.mobile);
+      await waitScene(page, 'Result', 60_000);
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `result-double-ru-${name}`);
       expect(problems).toEqual([]);
     });
   });

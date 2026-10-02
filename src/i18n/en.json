@@ -79,5 +79,18 @@
   "upgrades.jar": "Wider Jar",
   "upgrades.jar.hint": "The jar gets 2% wider",
   "upgrades.max": "MAX",
-  "result.newForms": "New forms"
+  "result.newForms": "New forms",
+  "ads.unavailable": "Ads are not available yet",
+  "offer.decline": "Not now",
+  "offer.secondChance.text": "Watch an ad: we'll remove the top {count} keys and you can keep playing!",
+  "offer.secondChance.watch": "Ad: one more chance",
+  "offer.secondChance.decline": "No, thanks",
+  "offer.shake.title": "+1 Shake",
+  "offer.shake.text": "You're out of shakes. Watch an ad to get one more!",
+  "offer.shake.watch": "Ad: +1 Shake",
+  "offer.remove.title": "+1 Remove",
+  "offer.remove.text": "You're out of removes. Watch an ad to get one more!",
+  "offer.remove.watch": "Ad: +1 Remove",
+  "result.double": "Ad: ×2 coins",
+  "result.doubled": "Coins doubled!"
 }

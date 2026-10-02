@@ -163,9 +163,30 @@ export class RunHud {
     this.placePreviews();
   }
 
-  setCharges(shakes: number, removes: number): void {
-    this.shake?.setBadge(shakes).setDisabled(shakes <= 0);
-    this.remove?.setBadge(removes).setDisabled(removes <= 0);
+  /**
+   * Заряды инструментов. offers — заряды кончились, но ещё один можно получить за рекламу:
+   * тогда кнопка не бледнеет, а в углу вместо нуля значок «▶».
+   */
+  setCharges(shakes: number, removes: number, offers: HudTools): void {
+    RunHud.setTool(this.shake, shakes, offers.shake);
+    RunHud.setTool(this.remove, removes, offers.remove);
+  }
+
+  /** Кнопки паузы и инструментов: на время «Второго шанса» прячутся и не нажимаются. */
+  setControlsVisible(visible: boolean): void {
+    for (const button of [this.pause, this.shake, this.remove]) {
+      if (!button) continue;
+      button.setVisible(visible);
+      if (visible) button.setInteractive();
+      else button.disableInteractive();
+    }
+  }
+
+  private static setTool(button: Button | null, charges: number, offer: boolean): void {
+    if (!button) return;
+    if (charges > 0) button.setBadge(charges).setDisabled(false);
+    else if (offer) button.setAdBadge().setDisabled(false);
+    else button.setBadge(0).setDisabled(true);
   }
 
   setRemoveMode(on: boolean): void {

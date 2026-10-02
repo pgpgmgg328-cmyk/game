@@ -35,6 +35,7 @@ const MAX_FORMS = 5;
 
 /** Блоки экрана по порядку важности: низкий экран показывает только первые. */
 type Block = 'score' | 'coins' | 'forms' | 'awards' | 'key';
+const BLOCKS: readonly Block[] = ['score', 'coins', 'forms', 'awards', 'key'];
 const BLOCK_HEIGHT: Record<Block, number> = {
   score: 240,
   coins: 76,
@@ -78,6 +79,10 @@ export class ResultScene extends BaseScene {
   private fx!: Particles;
   private again!: Button;
   private menu!: Button;
+  /** «▶ ×2 монеты» за рекламу; null — монет за забег нет. */
+  private double: Button | null = null;
+  /** Надпись «Монеты удвоены!» на месте кнопки после награды. */
+  private doubledText!: Phaser.GameObjects.Text;
   private keyScale = 1;
   private formScales: number[] = [];
   private shown = 0;
@@ -88,6 +93,8 @@ export class ResultScene extends BaseScene {
   private revealed = false;
   private coinsRevealed = false;
   private leaving = false;
+  private watching = false;
+  private doubled = false;
 
   constructor() {
     super('Result');
@@ -103,6 +110,8 @@ export class ResultScene extends BaseScene {
     this.revealed = false;
     this.coinsRevealed = false;
     this.leaving = false;
+    this.watching = false;
+    this.doubled = false;
     const { t, lang } = this.ctx;
     const theme = getTheme(this.summary.world) ?? THEMES[0]!;
     const arts = ensureThemeArt(this, theme, lang);
@@ -180,6 +189,27 @@ export class ResultScene extends BaseScene {
       width: 480,
       onClick: () => void this.leave('Menu'),
     });
+    // «▶ ×2 монеты» (диздок, раздел 9): по желанию, только если монеты за забег есть.
+    this.double =
+      this.summary.coins > 0
+        ? new Button(this, 360, 0, {
+            id: 'result.double',
+            label: t('result.double'),
+            icon: 'play',
+            width: 480,
+            fontSize: 40,
+            onClick: () => void this.watchDouble(),
+          })
+        : null;
+    this.doubledText = this.createText(360, 0, t('result.doubled'), {
+      fontSize: '40px',
+      fontStyle: '900',
+      color: '#b8801f',
+      stroke: '#ffffff',
+      strokeThickness: 10,
+    })
+      .setOrigin(0.5)
+      .setVisible(false);
     this.onKeyAction((action) => {
       if (action === 'drop') void this.leave('Game');
     });
@@ -221,12 +251,17 @@ export class ResultScene extends BaseScene {
     const compact = height < 1000;
     this.title.setFontSize(compact ? 48 : 60);
     this.title.setPosition(360, (compact ? 24 : Math.min(Math.max(height * 0.06, 40), 110)) + 36);
+    const gap = compact ? 16 : 24;
     this.menu.setPosition(360, height - Math.max(28, height * 0.04) - 55);
-    this.again.setPosition(360, this.menu.y - 110 - 24);
+    this.again.setPosition(360, this.menu.y - 110 - gap);
+    // Кнопка рекламы — над «Ещё раз»; после награды на её месте надпись «Монеты удвоены!».
+    const topButtonY = this.double ? this.again.y - 110 - gap : this.again.y;
+    this.double?.setPosition(360, topButtonY);
+    this.doubledText.setPosition(360, topButtonY);
 
     // Счёт и монеты — всегда; новые формы и самая большая клавиша — если хватает места.
     const contentTop = this.title.y + 50;
-    const room = this.again.y - 55 - 24 - contentTop;
+    const room = topButtonY - 55 - 24 - contentTop;
     const wanted: Block[] = ['score', 'coins'];
     if (this.forms.length > 0) wanted.push('forms');
     if (this.awards.text !== '') wanted.push('awards');
@@ -242,7 +277,8 @@ export class ResultScene extends BaseScene {
     }
     const scale = Math.min(1, room / total);
     let y = contentTop + Math.max(0, (room - total * scale) / 2);
-    for (const block of wanted) this.setBlockVisible(block, shown.includes(block));
+    // Ненужные блоки (например, новых форм нет) тоже прячем, иначе их надпись висит в углу.
+    for (const block of BLOCKS) this.setBlockVisible(block, shown.includes(block));
     for (const block of shown) {
       this.placeBlock(block, y, scale);
       y += BLOCK_HEIGHT[block] * scale;
@@ -309,11 +345,69 @@ export class ResultScene extends BaseScene {
    * экран открывается, когда реклама закрыта или не нужна.
    */
   private async leave(target: 'Game' | 'Menu'): Promise<void> {
-    if (this.leaving) return;
+    if (this.leaving || this.watching) return;
     this.leaving = true;
     for (const button of this.getButtons()) button.setDisabled(true);
     await this.ctx.ads.interstitial();
     if (this.sys.isActive()) this.scene.start(target);
+  }
+
+  /**
+   * «▶ ×2 монеты»: монеты забега ещё раз — только в колбэке onRewarded (CLAUDE.md, «Реклама»).
+   * Реклама недоступна — кнопка так и говорит; закрыта раньше времени — можно попробовать снова.
+   */
+  private async watchDouble(): Promise<void> {
+    const button = this.double;
+    if (!button || this.leaving || this.watching || this.doubled) return;
+    this.watching = true;
+    for (const item of this.getButtons()) item.setDisabled(true);
+    const bonus = this.summary.coins;
+    const result = await this.ctx.ads.rewarded(() => {
+      if (this.doubled) return;
+      this.doubled = true;
+      this.ctx.save.update((draft) => {
+        draft.coins += bonus;
+      }, 'urgent');
+    });
+    if (!this.sys.isActive()) return;
+    this.watching = false;
+    this.again.setDisabled(false);
+    this.menu.setDisabled(false);
+    if (this.doubled) {
+      this.showDoubled(bonus);
+      return;
+    }
+    if (result === 'error') {
+      button.setIcon(null).setText(this.ctx.t('ads.unavailable'));
+      return;
+    }
+    button.setDisabled(false);
+  }
+
+  /** Награда получена: вместо кнопки — «Монеты удвоены!», счётчик монет дотикивает до ×2. */
+  private showDoubled(bonus: number): void {
+    this.double?.destroy();
+    this.double = null;
+    this.doubledText.setVisible(true);
+    this.finishCoins();
+    const from = this.summary.coins;
+    const to = from + bonus;
+    this.summary = { ...this.summary, coins: to };
+    this.ctx.audio.record();
+    this.fx.celebrate(this.coinIcon.x, this.coinIcon.y);
+    if (this.ctx.reducedMotion) {
+      this.setCoins(to);
+      return;
+    }
+    this.doubledText.setScale(0.6);
+    this.tweens.add({ targets: this.doubledText, scale: 1, duration: 320, ease: 'Back.easeOut' });
+    this.tweens.addCounter({
+      from,
+      to,
+      duration: 700,
+      ease: 'Quad.easeOut',
+      onUpdate: (tween) => this.setCoins(Math.round(tween.getValue() ?? to)),
+    });
   }
 
   private placeCoins(y: number): void {

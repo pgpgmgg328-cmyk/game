@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ADS,
   COINS,
   DANGER,
   DROP,
@@ -408,5 +409,86 @@ describe('забег: золото, апгрейды и инструменты',
     expect(copy.jar.width).toBe(modifiers.jarWidth);
     expect(copy.charges).toEqual({ shakes: 1, removes: 2 });
     expect([...copy.keys].map((key) => key.golden)).toEqual([true, false]);
+  });
+});
+
+/** Столбик из чередующихся Стрелочек и Циферок выше линии опасности, забег доигран до переполнения. */
+function overflowRun(options: Omit<RunOptions, 'seed'> = {}) {
+  const created = createRun(3, options);
+  const { run } = created;
+  let y = JAR.height;
+  for (let i = 0; i < 10; i += 1) {
+    const tier = i % 2 === 0 ? 5 : 4;
+    const { height } = run.sizeOf(tier);
+    run.placeKey(tier, 300, y - height / 2 - 1);
+    y -= height + 2;
+  }
+  run.stepMany(Math.round((DANGER.overflowMs / 1000) * STEPS_PER_SECOND) + 2 * STEPS_PER_SECOND);
+  return created;
+}
+
+describe('бонусы за рекламу', () => {
+  it('«Второй шанс»: только после переполнения, убирает три верхние клавиши, забег идёт дальше', () => {
+    const fresh = createRun();
+    expect(fresh.run.canRevive).toBe(false);
+    expect(fresh.run.revive(ADS.secondChanceKeys)).toBe(false);
+
+    const { run, events } = overflowRun();
+    expect(run.over).toBe(true);
+    expect(run.canRevive).toBe(true);
+    const highest = [...run.keys]
+      .sort((a, b) => a.body.bounds.min.y - b.body.bounds.min.y)
+      .slice(0, ADS.secondChanceKeys)
+      .map((key) => key.id);
+    const before = run.keyCount;
+    expect(run.revive(ADS.secondChanceKeys)).toBe(true);
+    expect(run.over).toBe(false);
+    expect(run.keyCount).toBe(before - ADS.secondChanceKeys);
+    const revive = ofType(events, 'revive')[0]!;
+    expect(revive.removed.map((key) => key.id).sort()).toEqual(highest.sort());
+    expect(run.dangerWarning).toBe(false);
+    expect(ofType(events, 'danger').at(-1)).toEqual({ type: 'danger', warning: false });
+    expect(run.bonuses.revive).toBe(true);
+
+    // Банка снова в порядке: можно бросать, а забег не кончается сам собой.
+    run.stepMany(3 * STEPS_PER_SECOND);
+    expect(run.over).toBe(false);
+    expect(run.canDrop).toBe(true);
+  });
+
+  it('«Второй шанс» — один раз за забег, и после перезагрузки тоже', () => {
+    const { run } = overflowRun();
+    run.revive(ADS.secondChanceKeys);
+    const restored = new Run(matter, WORLD1_CLASSIC, { snapshot: run.snapshot() });
+    expect(restored.bonuses).toEqual({ revive: true, shake: false, remove: false });
+    // Снова переполняем банку вторым столбиком: второго шанса нет.
+    let y = JAR.height;
+    for (let i = 0; i < 10; i += 1) {
+      const tier = i % 2 === 0 ? 5 : 4;
+      const { height } = restored.sizeOf(tier);
+      restored.placeKey(tier, 110, y - height / 2 - 1);
+      y -= height + 2;
+    }
+    restored.stepMany(4 * STEPS_PER_SECOND);
+    expect(restored.over).toBe(true);
+    expect(restored.canRevive).toBe(false);
+    expect(restored.revive(ADS.secondChanceKeys)).toBe(false);
+  });
+
+  it('«+1 Встряска» и «+1 Удаление» за рекламу — когда заряды кончились, раз за забег', () => {
+    const { run, events } = createRun(1, { modifiers: withModifiers({ shakes: 1, removes: 0 }) });
+    expect(run.canAddCharge('shake')).toBe(false);
+    expect(run.canAddCharge('remove')).toBe(true);
+    expect(run.addCharge('remove')).toBe(true);
+    expect(run.charges).toEqual({ shakes: 1, removes: 1 });
+    expect(run.addCharge('remove')).toBe(false);
+    run.shake();
+    expect(run.canAddCharge('shake')).toBe(true);
+    expect(run.addCharge('shake')).toBe(true);
+    expect(run.charges).toEqual({ shakes: 1, removes: 1 });
+    run.shake();
+    expect(run.canAddCharge('shake')).toBe(false);
+    expect(ofType(events, 'charge').map((event) => event.tool)).toEqual(['remove', 'shake']);
+    expect(run.snapshot().adBonuses).toEqual({ revive: false, shake: true, remove: true });
   });
 });

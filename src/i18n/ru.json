@@ -79,5 +79,18 @@
   "upgrades.jar": "Банка шире",
   "upgrades.jar.hint": "Банка шире на 2%",
   "upgrades.max": "МАКС",
-  "result.newForms": "Новые формы"
+  "result.newForms": "Новые формы",
+  "ads.unavailable": "Реклама пока недоступна",
+  "offer.decline": "Не сейчас",
+  "offer.secondChance.text": "Посмотри рекламу — уберём {count} верхние клавиши, и можно играть дальше!",
+  "offer.secondChance.watch": "Реклама: ещё шанс",
+  "offer.secondChance.decline": "Нет, спасибо",
+  "offer.shake.title": "+1 Встряска",
+  "offer.shake.text": "Встряски кончились. Посмотри рекламу — и получишь ещё одну!",
+  "offer.shake.watch": "Реклама: +1 Встряска",
+  "offer.remove.title": "+1 Удаление",
+  "offer.remove.text": "Удаления кончились. Посмотри рекламу — и получишь ещё одно!",
+  "offer.remove.watch": "Реклама: +1 Удаление",
+  "result.double": "Реклама: ×2 монеты",
+  "result.doubled": "Монеты удвоены!"
 }

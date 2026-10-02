@@ -85,6 +85,8 @@ export class Button extends Phaser.GameObjects.Container {
   private hovered = false;
   private disabled = false;
   private badge: Phaser.GameObjects.Text | null = null;
+  /** В углу значок «▶»: ещё можно получить за рекламу. */
+  private adBadge = false;
 
   constructor(scene: ButtonHost, x: number, y: number, options: ButtonOptions) {
     super(scene, x, y);
@@ -174,6 +176,7 @@ export class Button extends Phaser.GameObjects.Container {
 
   /** Значок в углу кнопки: заряды «Встряски», процент альбома; null — без значка. */
   setBadge(value: number | string | null): this {
+    this.adBadge = false;
     if (value === null) {
       this.badge?.setVisible(false);
       this.redraw();
@@ -187,6 +190,14 @@ export class Button extends Phaser.GameObjects.Container {
       this.add(this.badge);
     }
     this.badge.setText(String(value)).setVisible(true);
+    this.redraw();
+    return this;
+  }
+
+  /** Значок «▶» в углу вместо числа: ещё можно получить за рекламу. */
+  setAdBadge(): this {
+    this.adBadge = true;
+    this.badge?.setVisible(false);
     this.redraw();
     return this;
   }
@@ -300,7 +311,16 @@ export class Button extends Phaser.GameObjects.Container {
       const color = Phaser.Display.Color.HexStringToColor(colors.text).color;
       drawIcon(g, this.icon, iconX, centerY, faceHeight * ICON_SIZE, color);
     }
-    if (this.badge?.visible) {
+    if (this.adBadge) {
+      // Кружок с треугольником «▶»: рисуем сами, в шрифте этого символа может не быть.
+      const x = width / 2 - BADGE_RADIUS * 0.55;
+      const y = top - BADGE_RADIUS * 0.25;
+      g.fillStyle(0x7b61ff, 1);
+      g.fillCircle(x, y, BADGE_RADIUS);
+      g.lineStyle(4, 0xffffff, 1);
+      g.strokeCircle(x, y, BADGE_RADIUS);
+      drawIcon(g, 'play', x + 2, y, BADGE_RADIUS * 1.3, 0xffffff);
+    } else if (this.badge?.visible) {
       // Кружок для числа, «таблетка» для надписи подлиннее (например, «54%»).
       const badgeWidth = Math.max(BADGE_RADIUS * 2, this.badge.width + 8);
       const x = width / 2 - badgeWidth / 2 + BADGE_RADIUS * 0.45;

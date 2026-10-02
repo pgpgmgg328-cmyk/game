@@ -22,7 +22,13 @@ import {
   type MergeResult,
 } from '../../core/run/merge';
 import { Rng, randomSeed } from '../../core/run/rng';
-import { RUN_SNAPSHOT_VERSION, type KeySnapshot, type RunSnapshot } from '../../core/run/snapshot';
+import {
+  NO_AD_BONUSES,
+  RUN_SNAPSHOT_VERSION,
+  type AdBonuses,
+  type KeySnapshot,
+  type RunSnapshot,
+} from '../../core/run/snapshot';
 import { KeyQueue, type QueueItem, type SpawnSchedule } from '../../core/run/spawn';
 import { formOf, maxTier, type ThemeData } from '../../themes';
 import type { MatterBody, MatterCollisionEvent, MatterEngine, MatterModule } from './matter';
@@ -90,9 +96,16 @@ export type RunEvent =
   | { type: 'shake' }
   /** «Удаление»: клавиша убрана из банки. */
   | { type: 'remove'; key: RunKey }
+  /** «Второй шанс»: верхние клавиши убраны, забег продолжается. */
+  | { type: 'revive'; removed: readonly RunKey[] }
+  /** За рекламу добавлен заряд инструмента. */
+  | { type: 'charge'; tool: ToolId }
   /** Изменилось состояние линии опасности. */
   | { type: 'danger'; warning: boolean }
   | { type: 'gameover' };
+
+/** Инструменты забега. */
+export type ToolId = 'shake' | 'remove';
 
 export interface RunOptions {
   /** seed нового забега; по умолчанию случайный. */
@@ -163,6 +176,7 @@ export class Run {
   private readonly preview: number;
   private shakesLeft: number;
   private removesLeft: number;
+  private readonly adBonuses: AdBonuses;
   private readonly danger = new DangerTracker(DANGER.overflowMs);
   private readonly combo = new ComboCounter(COMBO.windowMs, COMBO.maxSteps);
   private readonly squishCooldown = new CooldownMap(SQUISH.cooldownMs);
@@ -200,6 +214,7 @@ export class Run {
     this.preview = saved?.preview ?? modifiers.preview;
     this.shakesLeft = snapshot?.shakes ?? modifiers.shakes;
     this.removesLeft = snapshot?.removes ?? modifiers.removes;
+    this.adBonuses = { ...(snapshot?.adBonuses ?? NO_AD_BONUSES) };
 
     this.seed = snapshot?.seed ?? options.seed ?? randomSeed();
     this.rng = new Rng(snapshot?.rng ?? this.seed);
@@ -286,6 +301,22 @@ export class Run {
   /** Оставшиеся заряды «Встряски» и «Удаления». */
   get charges(): { shakes: number; removes: number } {
     return { shakes: this.shakesLeft, removes: this.removesLeft };
+  }
+
+  /** Какие бонусы за рекламу уже взяты в этом забеге. */
+  get bonuses(): Readonly<AdBonuses> {
+    return this.adBonuses;
+  }
+
+  /** Можно предложить «Второй шанс»: банка переполнена, шанса ещё не было и есть что убрать. */
+  get canRevive(): boolean {
+    return this.finished && !this.adBonuses.revive && this.keyMap.size > 0;
+  }
+
+  /** Можно добавить заряд за рекламу: заряды кончились, а этот бонус в забеге ещё не брали. */
+  canAddCharge(tool: ToolId): boolean {
+    const left = tool === 'shake' ? this.shakesLeft : this.removesLeft;
+    return !this.finished && left === 0 && !this.adBonuses[tool];
   }
 
   /** Висящую клавишу уже можно сбросить (прошла пауза после прошлого сброса). */
@@ -411,6 +442,36 @@ export class Run {
     return true;
   }
 
+  /**
+   * «Второй шанс» (диздок, раздел 8): убрать count верхних клавиш и продолжить переполненный
+   * забег. Один раз за забег; false — нельзя (забег идёт, шанс уже был или банка пуста).
+   */
+  revive(count: number): boolean {
+    if (!this.canRevive) return false;
+    const removed = [...this.keyMap.values()]
+      .sort((a, b) => a.body.bounds.min.y - b.body.bounds.min.y)
+      .slice(0, Math.max(1, count));
+    removed.forEach((key) => this.detach(key));
+    this.adBonuses.revive = true;
+    this.finished = false;
+    this.accumulator = 0;
+    this.danger.reset();
+    this.dangerState = { warning: false, overflow: false, longestMs: 0 };
+    this.emit({ type: 'revive', removed });
+    this.emit({ type: 'danger', warning: false });
+    return true;
+  }
+
+  /** «+1 Встряска» или «+1 Удаление» за рекламу, когда заряды кончились: раз за забег на каждый. */
+  addCharge(tool: ToolId): boolean {
+    if (!this.canAddCharge(tool)) return false;
+    if (tool === 'shake') this.shakesLeft += 1;
+    else this.removesLeft += 1;
+    this.adBonuses[tool] = true;
+    this.emit({ type: 'charge', tool });
+    return true;
+  }
+
   // ── Время ──────────────────────────────────────────────────────────────────────────────
 
   /**
@@ -475,6 +536,7 @@ export class Run {
       },
       shakes: this.shakesLeft,
       removes: this.removesLeft,
+      adBonuses: { ...this.adBonuses },
       keys,
     };
   }

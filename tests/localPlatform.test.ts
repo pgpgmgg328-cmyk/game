@@ -69,7 +69,7 @@ describe('LocalPlatform', () => {
     const platform = await platformWith(storage);
     expect(platform.loadRunSnapshot()).toBeNull();
     const snapshot = {
-      v: 2 as const,
+      v: 3 as const,
       world: 'classic',
       seed: 1,
       rng: 2,
@@ -87,6 +87,7 @@ describe('LocalPlatform', () => {
       modifiers: { jarWidth: 600, preview: 1, squishPower: 1, goldenChance: 0.02 },
       shakes: 0,
       removes: 0,
+      adBonuses: { revive: false, shake: false, remove: false },
       keys: [],
     };
     platform.saveRunSnapshot(snapshot);
