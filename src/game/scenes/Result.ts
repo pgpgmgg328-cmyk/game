@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { achievementList } from '../../core/meta/achievements';
+import { shouldAskReview } from '../../core/meta/prompts';
 import { formatNumber } from '../../i18n';
 import {
   DEFAULT_THEME_ID,
@@ -32,6 +33,8 @@ const COUNT_MS = 1200;
 const COINS_MS = 600;
 /** Больше новых форм в строке не показываем: остальные — «+N». */
 const MAX_FORMS = 5;
+/** Просьба оценить игру — чуть позже «Нового рекорда!», чтобы ребёнок успел порадоваться. */
+const REVIEW_DELAY_MS = 1500;
 
 /** Блоки экрана по порядку важности: низкий экран показывает только первые. */
 type Block = 'score' | 'coins' | 'forms' | 'awards' | 'key';
@@ -223,6 +226,31 @@ export class ResultScene extends BaseScene {
       this.finishCoins();
     }
     this.layoutScreen(this.screenHeight);
+    this.scheduleReview();
+  }
+
+  /**
+   * Оценка игры (диздок, раздел 9): после хорошего момента — первый Энтер или новый рекорд
+   * с третьего забега — и не больше одного раза. Окно показывает площадка, если разрешает.
+   */
+  private scheduleReview(): void {
+    const { ctx } = this;
+    const moment = {
+      newForms: this.summary.newForms,
+      newRecord: this.summary.newRecord,
+      completedRuns: ctx.save.data.stats.runs,
+    };
+    if (!shouldAskReview(ctx.save.data, moment)) return;
+    this.time.delayedCall(COUNT_MS + REVIEW_DELAY_MS, () => {
+      if (this.leaving || this.watching) return;
+      void ctx.platform.requestReview().then((result) => {
+        // Площадка ответила «уже оценили» или окно показано — больше не просим.
+        if (result === 'later') return;
+        ctx.save.update((draft) => {
+          draft.prompts.review = true;
+        });
+      });
+    });
   }
 
   override update(time: number, delta: number): void {

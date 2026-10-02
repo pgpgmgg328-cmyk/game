@@ -22,7 +22,8 @@ export type ButtonIcon =
   | 'upgrades'
   | 'shop'
   | 'leaderboard'
-  | 'settings';
+  | 'settings'
+  | 'shortcut';
 
 export interface ButtonOptions {
   /** Постоянный идентификатор кнопки (для автотестов). */
@@ -556,6 +557,16 @@ export function drawIcon(
       g.fillPoints(points, true);
       g.lineStyle(Math.max(4, s * 0.1), 0xffffff, 1);
       g.strokeCircle(x, y, s * 0.1);
+      return;
+    }
+    case 'shortcut': {
+      // Значок приложения с плюсом: «ярлык на рабочий стол».
+      const k = s * 0.7;
+      g.strokeRoundedRect(x - k / 2, y - k / 2, k, k, s * 0.18);
+      const p = s * 0.18;
+      g.lineStyle(Math.max(5, s * 0.12), color, 1);
+      g.lineBetween(x - p, y, x + p, y);
+      g.lineBetween(x, y - p, x, y + p);
       return;
     }
     case 'coin': {

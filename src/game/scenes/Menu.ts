@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { grantAchievements, type SecretAchievement } from '../../core/meta/achievements';
 import { albumProgress } from '../../core/meta/album';
+import { shouldOfferShortcut } from '../../core/meta/prompts';
 import { SecretWordTracker } from '../../core/menu/easterEggs';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
@@ -57,6 +58,8 @@ export class MenuScene extends BaseScene {
   private theme!: ThemeData;
   private arts: KeyArt[] = [];
   private resume: ResumeDialog | null = null;
+  /** «На рабочий стол»: появляется после пятого забега, если площадка разрешает ярлык. */
+  private shortcut: Button | null = null;
   private secretWord = new SecretWordTracker();
   private idleMs = 0;
 
@@ -120,6 +123,8 @@ export class MenuScene extends BaseScene {
     const album = albumProgress(this.ctx.save.data.album, WORLD_SIZES);
     this.items.find((item) => item.id === 'menu.album')?.setBadge(`${album.percent}%`);
     this.resume = null;
+    this.shortcut = null;
+    this.offerShortcut();
     this.onKeyAction((action) => {
       if (this.resume) {
         if (action === 'drop') this.answerResume(true);
@@ -170,11 +175,12 @@ export class MenuScene extends BaseScene {
     // Монеты: в левом верхнем углу, а если сбоку есть место — на боковой панели.
     const coinsInSide = compact && sideRoom >= SIDE_MASCOTS_ROOM;
     this.placeCoins(coinsInSide ? visibleLeft / 2 : null, coinsInSide ? 60 : 54);
-    const logoTop = compact
-      ? coinsInSide
-        ? 20
-        : 100
-      : Math.min(Math.max(height * 0.07, 104), 150);
+    // Кнопка «На рабочий стол» сверху справа: название игры опускается под неё.
+    const shortcutAbove = this.shortcut !== null && !coinsInSide;
+    const logoTop = Math.max(
+      shortcutAbove ? 124 : 0,
+      compact ? (coinsInSide ? 20 : 100) : Math.min(Math.max(height * 0.07, 104), 150),
+    );
     const titleBottom = this.logo.layout(logoTop, compact);
     const playHeight = compact ? 150 : 170;
     this.play.setButtonSize(compact ? 420 : 480, playHeight);
@@ -203,6 +209,7 @@ export class MenuScene extends BaseScene {
       );
     });
     this.layoutMascots(height, gridTop + gridHeight, sideRoom, visibleLeft, visibleRight);
+    this.placeShortcut(coinsInSide, visibleRight);
     this.toasts.setAnchor(360, height - 80, 680);
     this.layoutResume(height);
   }
@@ -273,6 +280,65 @@ export class MenuScene extends BaseScene {
   /** Персонажи меню: самые большие открытые формы. */
   private mascotArts(): KeyArt[] {
     return this.openedArts().slice(0, 4);
+  }
+
+  // ── Ярлык на рабочий стол ────────────────────────────────────────────────────────────
+
+  /** Кнопка-предложение после пятого забега (диздок, раздел 9) — только если площадка разрешает. */
+  private offerShortcut(): void {
+    const { ctx } = this;
+    if (!shouldOfferShortcut(ctx.save.data)) return;
+    void ctx.platform.canAddShortcut().then((canShow) => {
+      if (!canShow || !this.sys.isActive() || this.shortcut) return;
+      this.shortcut = new Button(this, 0, 0, {
+        id: 'menu.shortcut',
+        label: ctx.t('menu.shortcut'),
+        icon: 'shortcut',
+        width: 330,
+        height: 110,
+        fontSize: 32,
+        onClick: () => void this.addShortcut(),
+      });
+      if (this.resume) this.shortcut.disableInteractive();
+      this.layoutScreen(this.screenHeight);
+    });
+  }
+
+  /** Сверху справа, а на лежащем телефоне — на правой боковой панели. */
+  private placeShortcut(inSide: boolean, visibleRight: number): void {
+    const button = this.shortcut;
+    if (!button) return;
+    if (inSide) {
+      const room = visibleRight - 720 - 24;
+      button.setButtonSize(Math.min(330, room), 110);
+      button.setPosition((720 + visibleRight) / 2, 66);
+      return;
+    }
+    button.setButtonSize(330, 110);
+    button.setPosition(720 - 24 - 165, 58);
+  }
+
+  private async addShortcut(): Promise<void> {
+    const { ctx } = this;
+    const button = this.shortcut;
+    if (!button) return;
+    button.setDisabled(true);
+    const accepted = await ctx.platform.addShortcut();
+    if (!this.sys.isActive()) return;
+    if (!accepted) {
+      button.setDisabled(false);
+      return;
+    }
+    ctx.save.update((draft) => {
+      draft.prompts.shortcut = true;
+    });
+    button.destroy();
+    this.shortcut = null;
+    this.toasts.show({
+      icon: { kind: 'medal' },
+      title: ctx.t('menu.shortcutDone.title'),
+      detail: ctx.t('menu.shortcutDone.text'),
+    });
   }
 
   // ── Пасхалки ─────────────────────────────────────────────────────────────────────────
@@ -421,7 +487,7 @@ export class MenuScene extends BaseScene {
   }
 
   private setMenuEnabled(enabled: boolean): void {
-    for (const button of [this.play, ...this.items]) {
+    for (const button of [this.play, ...this.items, ...(this.shortcut ? [this.shortcut] : [])]) {
       if (enabled) button.setInteractive();
       else button.disableInteractive();
     }

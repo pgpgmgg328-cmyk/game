@@ -107,5 +107,8 @@
   "leaderboard.unavailable": "The leaderboard is not available yet",
   "leaderboard.empty": "Nothing here yet. Play, and your record will be the first!",
   "leaderboard.signInText": "Sign in with Yandex ID so everyone can see your record and your progress is on all your devices",
-  "leaderboard.signIn": "Sign in"
+  "leaderboard.signIn": "Sign in",
+  "menu.shortcut": "Add to desktop",
+  "menu.shortcutDone.title": "Done!",
+  "menu.shortcutDone.text": "The game is now on your desktop"
 }

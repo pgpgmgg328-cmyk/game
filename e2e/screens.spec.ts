@@ -4,6 +4,7 @@ import {
   e2eState,
   expectButtonsFit,
   expectNoPageScroll,
+  getButtons,
   openGame,
   patchSave,
   press,
@@ -161,6 +162,25 @@ for (const size of SIZES) {
       await expectNoPageScroll(page);
       await expectButtonsFit(page);
       await screenshot(page, `shop-ru-${name}`);
+      expect(problems).toEqual([]);
+    });
+
+    test('меню с кнопкой «На рабочий стол» помещается, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(120_000);
+      const problems = watchConsole(page);
+      // Кнопку показывают после пятого забега, если площадка разрешает ярлык.
+      await useFakeSdk(page);
+      await openGame(page, { seed: '7' });
+      await patchSave(page, { ...VETERAN_SAVE, coins: 940, stats: { bestScore: 900, runs: 5 } });
+      await page.reload();
+      await waitScene(page, 'Menu');
+      await expect
+        .poll(async () => (await getButtons(page)).map((button) => button.id))
+        .toContain('menu.shortcut');
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `menu-shortcut-ru-${name}`);
       expect(problems).toEqual([]);
     });
 

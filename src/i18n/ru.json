@@ -107,5 +107,8 @@
   "leaderboard.unavailable": "Таблица рекордов пока недоступна",
   "leaderboard.empty": "Пока здесь пусто. Сыграй — и твой рекорд будет первым!",
   "leaderboard.signInText": "Войди через Яндекс ID, чтобы твой рекорд увидели все, а прогресс был на всех устройствах",
-  "leaderboard.signIn": "Войти"
+  "leaderboard.signIn": "Войти",
+  "menu.shortcut": "На рабочий стол",
+  "menu.shortcutDone.title": "Готово!",
+  "menu.shortcutDone.text": "Игра теперь на рабочем столе"
 }
