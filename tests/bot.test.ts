@@ -30,6 +30,16 @@ describe('бот для soak-теста', () => {
     }
   });
 
+  it('«Метеорчик» бросает в самую высокую клавишу', () => {
+    const keys = [
+      { tier: 3, x: 120, top: 700, width: 72 },
+      { tier: 6, x: 400, top: 560, width: 120 },
+      { tier: 2, x: 520, top: 730, width: 60 },
+    ];
+    expect(chooseAim({ ...view(keys, 1, 55), meteor: true }, never)).toBe(400);
+    expect(chooseAim({ ...view([], 1, 55), meteor: true }, never)).toBe(300);
+  });
+
   it('случайный бросок не выходит за стенки банки', () => {
     const always = (): number => 0;
     expect(chooseAim(view([], 5, 100), always)).toBe(50);

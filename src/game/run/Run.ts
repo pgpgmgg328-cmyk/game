@@ -27,11 +27,18 @@ import {
   RUN_SNAPSHOT_VERSION,
   type AdBonuses,
   type KeySnapshot,
+  type MeteorSnapshot,
   type RunSnapshot,
 } from '../../core/run/snapshot';
 import { KeyQueue, type QueueItem, type SpawnSchedule } from '../../core/run/spawn';
 import { formOf, maxTier, type ThemeData } from '../../themes';
 import type { MatterBody, MatterCollisionEvent, MatterEngine, MatterModule } from './matter';
+
+/**
+ * «Карамелька» (мир 2): none — обычная клавиша; fresh — в карамели, ещё не прилипала;
+ * stuck — держится за стенку; spent — отлипла и дальше обычная.
+ */
+export type CaramelPhase = 'none' | 'fresh' | 'stuck' | 'spent';
 
 /**
  * Геометрия банки в единицах физики. Внутренность банки: x от 0 до width, y от 0 (верхний край
@@ -59,9 +66,23 @@ export interface RunKey {
   settled: boolean;
   /** Клавиша слилась и убрана из банки. */
   removed: boolean;
-  /** Время забега, когда клавиша появилась в банке. */
-  readonly bornAt: number;
+  /** Время забега, когда клавиша появилась в банке (или отлипла от стенки и снова падает). */
+  bornAt: number;
   /** Положение до последнего шага физики — чтобы рисовать плавно между шагами. */
+  prevX: number;
+  prevY: number;
+  prevAngle: number;
+  caramel: CaramelPhase;
+  /** Когда (время забега) прилипшая «Карамелька» отлипнет. */
+  stuckUntil: number;
+}
+
+/** «Метеорчик» в полёте (мир 3). */
+export interface RunMeteor {
+  readonly body: MatterBody;
+  /** Диаметр в единицах физики. */
+  readonly size: number;
+  readonly bornAt: number;
   prevX: number;
   prevY: number;
   prevAngle: number;
@@ -100,6 +121,15 @@ export type RunEvent =
   | { type: 'revive'; removed: readonly RunKey[] }
   /** За рекламу добавлен заряд инструмента. */
   | { type: 'charge'; tool: ToolId }
+  /** «Карамелька» прилипла к стенке и отлипла. */
+  | { type: 'stick'; key: RunKey }
+  | { type: 'unstick'; key: RunKey }
+  /** «Метеорчик» сброшен в банку. */
+  | { type: 'meteorDrop'; meteor: RunMeteor }
+  /** «Метеорчик» попал в клавишу: она мягко исчезла вместе с ним. */
+  | { type: 'meteorHit'; key: RunKey; x: number; y: number }
+  /** «Метеорчик» долетел до дна, никого не задев, и рассыпался блёстками. */
+  | { type: 'meteorGone'; x: number; y: number }
   /** Изменилось состояние линии опасности. */
   | { type: 'danger'; warning: boolean }
   | { type: 'gameover' };
@@ -118,6 +148,8 @@ export interface RunOptions {
   opening?: readonly number[];
   /** Какие клавиши выпадают; по умолчанию — SPAWN из config/balance.ts (флаг spawnWeights меняет веса). */
   spawn?: SpawnSchedule;
+  /** Пробный забег в закрытом мире за рекламу (снимок помнит это сам). */
+  trial?: boolean;
 }
 
 export interface RunStats {
@@ -148,6 +180,10 @@ const PHYSICS_WALL = 400;
 const WALL_EXTRA_HEIGHT = 4000;
 /** Удар слабее этого не анимируется (единиц за шаг). */
 const IMPACT_MIN_SPEED = 1.5;
+/** Страховка: «Метеорчик», который так и не коснулся клавиши или дна, рассыпается через это время. */
+const METEOR_MAX_MS = 6000;
+/** «Карамелька» прилипает, когда до стенки меньше этого (единицы физики). */
+const CARAMEL_SLOP = 5;
 
 function round(value: number, digits: number): number {
   const factor = 10 ** digits;
@@ -164,6 +200,8 @@ export class Run {
   readonly theme: ThemeData;
   readonly jar: JarGeometry;
   readonly seed: number;
+  /** Пробный забег в закрытом мире (за рекламу): мир от него не открывается. */
+  readonly trial: boolean;
 
   private readonly matter: MatterModule;
   private readonly engine: MatterEngine;
@@ -184,6 +222,13 @@ export class Run {
   private readonly keyMap = new Map<number, RunKey>();
   private readonly byBody = new Map<number, RunKey>();
   private readonly maxTier: number;
+  /** Страховка «клавиша упала»: при слабой гравитации клавиши падают дольше (время ∝ 1/√g). */
+  private readonly settleAfterMs: number;
+  /** Дно банки: о него рассыпается «Метеорчик», если ни в кого не попал. */
+  private floorId = -1;
+  private meteor: RunMeteor | null = null;
+  /** Чего коснулся «Метеорчик» на этом шаге: клавиши, дна (null) или ничего (undefined). */
+  private meteorTouch: RunKey | null | undefined = undefined;
 
   private nextId = 1;
   private accumulator = 0;
@@ -200,6 +245,7 @@ export class Run {
     this.matter = matter;
     this.theme = theme;
     this.maxTier = maxTier(theme);
+    this.settleAfterMs = PHYSICS.settleAfterMs / Math.sqrt(theme.physics.gravityScale);
     const snapshot = options.snapshot;
     const modifiers = options.modifiers ?? BASE_MODIFIERS;
     const saved = snapshot?.modifiers;
@@ -217,13 +263,28 @@ export class Run {
     this.adBonuses = { ...(snapshot?.adBonuses ?? NO_AD_BONUSES) };
 
     this.seed = snapshot?.seed ?? options.seed ?? randomSeed();
+    this.trial = snapshot?.trial ?? options.trial ?? false;
     this.rng = new Rng(snapshot?.rng ?? this.seed);
     this.fxRng = new Rng((this.seed ^ 0x5bd1e995) >>> 0);
+    const { caramel, meteor } = theme.specials;
     this.queue = new KeyQueue(
       this.rng,
       options.spawn ?? SPAWN,
-      { preview: this.preview, goldenChance: this.goldenChance, opening: options.opening },
-      snapshot ? { current: snapshot.current, upcoming: snapshot.upcoming } : undefined,
+      {
+        preview: this.preview,
+        goldenChance: this.goldenChance,
+        opening: options.opening,
+        caramelChance: caramel?.chance,
+        meteorEveryMs: meteor?.everyMs,
+      },
+      snapshot
+        ? {
+            current: snapshot.current,
+            upcoming: snapshot.upcoming,
+            // Снимок без «Метеорчика» (старый) — отсчёт с того времени забега, где он прерван.
+            meteorAt: snapshot.meteorAt || undefined,
+          }
+        : undefined,
     );
     this.stats = {
       score: snapshot?.score ?? 0,
@@ -247,6 +308,7 @@ export class Run {
 
     this.aim = this.clampAim(snapshot?.aimX ?? this.jar.width / 2);
     snapshot?.keys.forEach((key) => this.restoreKey(key));
+    if (snapshot?.meteor) this.restoreMeteor(snapshot.meteor);
   }
 
   // ── Состояние для сцены ────────────────────────────────────────────────────────────────
@@ -298,6 +360,23 @@ export class Run {
     return this.queue.upcoming;
   }
 
+  /** «Метеорчик» в полёте или null. */
+  get meteorInFlight(): RunMeteor | null {
+    return this.meteor;
+  }
+
+  /** Размер висящей клавиши или «Метеорчика» в единицах физики. */
+  get currentSize(): { width: number; height: number } {
+    return this.itemSize(this.queue.current);
+  }
+
+  /** Размер того, что стоит в очереди: клавиши или «Метеорчика». */
+  itemSize(item: QueueItem): { width: number; height: number } {
+    if (!item.meteor) return this.sizeOf(item.tier);
+    const size = this.meteorSize();
+    return { width: size, height: size };
+  }
+
   /** Оставшиеся заряды «Встряски» и «Удаления». */
   get charges(): { shakes: number; removes: number } {
     return { shakes: this.shakesLeft, removes: this.removesLeft };
@@ -328,9 +407,9 @@ export class Run {
     return this.aim;
   }
 
-  /** Центр висящей клавиши по y. */
-  hangY(tier = this.queue.current.tier): number {
-    return -JAR.hangGap - this.sizeOf(tier).height / 2;
+  /** Центр висящей клавиши (или «Метеорчика») по y. */
+  hangY(item: QueueItem = this.queue.current): number {
+    return -JAR.hangGap - this.itemSize(item).height / 2;
   }
 
   /** Размер клавиши тира в единицах физики. */
@@ -360,15 +439,23 @@ export class Run {
   /** Сбросить висящую клавишу. false — ещё идёт пауза после прошлого сброса или забег окончен. */
   drop(): boolean {
     if (!this.canDrop) return false;
-    const { tier, golden } = this.queue.current;
-    const key = this.addKey(tier, golden, this.aim, this.hangY(tier), 0);
-    key.settled = false;
+    const item = this.queue.current;
+    let event: RunEvent;
+    if (item.meteor) {
+      event = { type: 'meteorDrop', meteor: this.launchMeteor(this.aim, this.hangY(item)) };
+    } else {
+      const { tier, golden } = item;
+      const caramel = item.caramel ? 'fresh' : 'none';
+      const key = this.addKey(tier, golden, this.aim, this.hangY(item), 0, caramel);
+      key.settled = false;
+      this.stats.bestTier = Math.max(this.stats.bestTier, tier);
+      event = { type: 'drop', key };
+    }
     this.stats.drops += 1;
     this.queue.advance(this.stats.elapsedMs / 1000);
-    this.stats.bestTier = Math.max(this.stats.bestTier, tier);
     this.readyAt = this.stats.elapsedMs + DROP.cooldownMs;
     this.aim = this.clampAim(this.aim);
-    this.emit({ type: 'drop', key });
+    this.emit(event);
     return true;
   }
 
@@ -402,6 +489,11 @@ export class Run {
   squish(key: RunKey, tapX: number): boolean {
     if (this.finished || key.removed) return false;
     if (!this.squishCooldown.tryUse(key.id, this.stats.elapsedMs)) return false;
+    // Прилипшая «Карамелька» только сминается и пищит: стенка держит её крепко.
+    if (key.caramel === 'stuck') {
+      this.emit({ type: 'squish', key });
+      return true;
+    }
     const { Body } = this.matter;
     const areaInUnits = (key.width * key.height) / (UNIT * UNIT);
     const lift = (SQUISH.impulse * this.squishPower) / areaInUnits ** SQUISH.sizeExponent;
@@ -421,6 +513,7 @@ export class Run {
     this.shakesLeft -= 1;
     const { Body } = this.matter;
     for (const key of this.keyMap.values()) {
+      if (key.caramel === 'stuck') continue;
       const areaInUnits = (key.width * key.height) / (UNIT * UNIT);
       const scale = 1 / areaInUnits ** SQUISH.sizeExponent;
       Body.setVelocity(key.body, {
@@ -502,16 +595,34 @@ export class Run {
   snapshot(): RunSnapshot {
     const keys: KeySnapshot[] = [...this.keyMap.values()]
       .sort((a, b) => a.id - b.id)
-      .map(({ tier, golden, body }) => ({
-        tier,
-        golden,
-        x: round(body.position.x, 2),
-        y: round(body.position.y, 2),
-        angle: round(body.angle, 4),
-        vx: round(body.velocity.x, 3),
-        vy: round(body.velocity.y, 3),
-        spin: round(body.angularVelocity, 4),
-      }));
+      .map((key) => {
+        const { tier, golden, body } = key;
+        const saved: KeySnapshot = {
+          tier,
+          golden,
+          x: round(body.position.x, 2),
+          y: round(body.position.y, 2),
+          angle: round(body.angle, 4),
+          vx: round(body.velocity.x, 3),
+          vy: round(body.velocity.y, 3),
+          spin: round(body.angularVelocity, 4),
+        };
+        if (key.caramel === 'fresh') saved.caramel = 'fresh';
+        if (key.caramel === 'stuck') {
+          saved.caramel = 'stuck';
+          saved.stuckMs = Math.max(0, Math.round(key.stuckUntil - this.stats.elapsedMs));
+        }
+        return saved;
+      });
+    const flying = this.meteor?.body;
+    const meteor: MeteorSnapshot | null = flying
+      ? {
+          x: round(flying.position.x, 2),
+          y: round(flying.position.y, 2),
+          vx: round(flying.velocity.x, 3),
+          vy: round(flying.velocity.y, 3),
+        }
+      : null;
     return {
       v: RUN_SNAPSHOT_VERSION,
       world: this.theme.id,
@@ -538,6 +649,9 @@ export class Run {
       removes: this.removesLeft,
       adBonuses: { ...this.adBonuses },
       keys,
+      meteorAt: Math.round(this.queue.state.meteorAt ?? 0),
+      meteor,
+      trial: this.trial,
     };
   }
 
@@ -554,6 +668,16 @@ export class Run {
     this.aim = this.clampAim(this.aim);
   }
 
+  /** Задать висящую «Карамельку» или «Метеорчик» (автотесты и скриншоты). */
+  setCurrentSpecial(kind: 'caramel' | 'meteor', tier = 1): void {
+    this.queue.replaceCurrentItem(
+      kind === 'meteor'
+        ? { tier: 1, golden: false, meteor: true }
+        : { tier, golden: false, caramel: true },
+    );
+    this.aim = this.clampAim(this.aim);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -561,6 +685,7 @@ export class Run {
     this.matter.Engine.clear(this.engine);
     this.keyMap.clear();
     this.byBody.clear();
+    this.meteor = null;
   }
 
   // ── Внутреннее ─────────────────────────────────────────────────────────────────────────
@@ -572,6 +697,11 @@ export class Run {
       key.prevY = key.body.position.y;
       key.prevAngle = key.body.angle;
     }
+    if (this.meteor) {
+      this.meteor.prevX = this.meteor.body.position.x;
+      this.meteor.prevY = this.meteor.body.position.y;
+      this.meteor.prevAngle = this.meteor.body.angle;
+    }
 
     const wasReady = this.canDrop;
     this.candidates = [];
@@ -580,14 +710,17 @@ export class Run {
 
     // Клавиши быстро перестают крутиться и оседают (диздок: сильное угловое демпфирование).
     for (const key of this.keyMap.values()) {
+      if (key.caramel === 'stuck') continue;
       Body.setAngularVelocity(key.body, key.body.angularVelocity * (1 - PHYSICS.angularDamping));
-      if (!key.settled && this.stats.elapsedMs - key.bornAt >= PHYSICS.settleAfterMs) {
+      if (!key.settled && this.stats.elapsedMs - key.bornAt >= this.settleAfterMs) {
         key.settled = true;
       }
     }
 
     this.flushEvents();
     this.applyMerges();
+    this.applyCaramel();
+    this.applyMeteor();
     this.updateDanger();
     if (!wasReady && this.canDrop) this.emit({ type: 'ready', item: this.queue.current });
   }
@@ -596,6 +729,11 @@ export class Run {
     for (const pair of event.pairs) {
       const bodyA = pair.bodyA.parent ?? pair.bodyA;
       const bodyB = pair.bodyB.parent ?? pair.bodyB;
+      const meteor = this.meteor?.body.id;
+      if (meteor !== undefined && (bodyA.id === meteor || bodyB.id === meteor)) {
+        this.touchMeteor(bodyA.id === meteor ? bodyB : bodyA);
+        continue;
+      }
       const keyA = this.byBody.get(bodyA.id);
       const keyB = this.byBody.get(bodyB.id);
       if (keyA && keyB && keyA.tier === keyB.tier && !keyA.removed && !keyB.removed) {
@@ -673,11 +811,107 @@ export class Run {
     }
   }
 
+  /** Чего коснулся «Метеорчик»: важно только первое касание клавиши или дна. */
+  private touchMeteor(other: MatterBody): void {
+    if (this.meteorTouch !== undefined) return;
+    const key = this.byBody.get(other.id);
+    if (key && !key.removed) this.meteorTouch = key;
+    else if (other.id === this.floorId) this.meteorTouch = null;
+  }
+
+  /**
+   * «Карамелька» (диздок, раздел 5): дотронувшись до стенки банки, держится за неё holdMs —
+   * тело становится неподвижным, — потом отлипает и падает обычной клавишей. «Дотронулась» —
+   * край ближе CARAMEL_SLOP к стенке: клавиша, падающая вплотную к стенке, её не задевает.
+   */
+  private applyCaramel(): void {
+    const { Body } = this.matter;
+    const holdMs = this.theme.specials.caramel?.holdMs ?? 0;
+    for (const key of this.keyMap.values()) {
+      if (key.caramel === 'stuck' && this.stats.elapsedMs >= key.stuckUntil) {
+        this.unstick(key);
+        continue;
+      }
+      // Прилипает только ниже линии опасности: иначе клавиши, упавшие на неё сверху,
+      // быстро закончили бы забег — для ребёнка это ловушка.
+      if (key.caramel !== 'fresh' || key.body.bounds.min.y < this.jar.dangerY) continue;
+      const { min, max } = key.body.bounds;
+      if (min.x > CARAMEL_SLOP && max.x < this.jar.width - CARAMEL_SLOP) continue;
+      Body.setStatic(key.body, true);
+      key.caramel = 'stuck';
+      key.stuckUntil = this.stats.elapsedMs + holdMs;
+      this.emit({ type: 'stick', key });
+    }
+  }
+
+  private unstick(key: RunKey): void {
+    this.matter.Body.setStatic(key.body, false);
+    key.caramel = 'spent';
+    // Клавиша снова падает: линия опасности смотрит на неё, только когда она опять осядет.
+    key.settled = false;
+    key.bornAt = this.stats.elapsedMs;
+    this.emit({ type: 'unstick', key });
+  }
+
+  /**
+   * «Метеорчик» (диздок, раздел 5): клавиша, в которую он попал, исчезает вместе с ним;
+   * долетел до дна, никого не задев, — рассыпается сам.
+   */
+  private applyMeteor(): void {
+    const meteor = this.meteor;
+    if (!meteor) return;
+    const touch = this.meteorTouch;
+    this.meteorTouch = undefined;
+    const { x, y } = meteor.body.position;
+    if (touch && !touch.removed) {
+      this.removeMeteor();
+      this.detach(touch);
+      this.emit({ type: 'meteorHit', key: touch, x, y });
+      return;
+    }
+    if (touch === null || touch?.removed || this.stats.elapsedMs - meteor.bornAt > METEOR_MAX_MS) {
+      this.removeMeteor();
+      this.emit({ type: 'meteorGone', x, y });
+    }
+  }
+
+  private meteorSize(): number {
+    return (this.theme.specials.meteor?.size ?? 1) * UNIT;
+  }
+
+  private launchMeteor(x: number, y: number): RunMeteor {
+    const { Bodies, Composite } = this.matter;
+    const size = this.meteorSize();
+    const body = Bodies.circle(x, y, size / 2, {
+      restitution: 0.1,
+      friction: PHYSICS.friction,
+      frictionAir: PHYSICS.frictionAir,
+    });
+    Composite.add(this.engine.world, body);
+    this.meteor = { body, size, bornAt: this.stats.elapsedMs, prevX: x, prevY: y, prevAngle: 0 };
+    this.meteorTouch = undefined;
+    return this.meteor;
+  }
+
+  private restoreMeteor(saved: MeteorSnapshot): void {
+    const meteor = this.launchMeteor(saved.x, saved.y);
+    this.matter.Body.setVelocity(meteor.body, { x: saved.vx, y: saved.vy });
+  }
+
+  private removeMeteor(): void {
+    if (!this.meteor) return;
+    this.matter.Composite.remove(this.engine.world, this.meteor.body);
+    this.meteor = null;
+    this.meteorTouch = undefined;
+  }
+
   private updateDanger(): void {
     const samples: DangerSample[] = [];
     for (const key of this.keyMap.values()) {
-      if (key.settled)
+      // Прилипшая «Карамелька» висит на стенке, а не лежит в куче: её линия не считает.
+      if (key.settled && key.caramel !== 'stuck') {
         samples.push({ id: key.id, above: key.body.bounds.min.y < this.jar.dangerY });
+      }
     }
     const previous = this.dangerState;
     this.dangerState = this.danger.update(samples, PHYSICS.stepMs);
@@ -690,7 +924,14 @@ export class Run {
     }
   }
 
-  private addKey(tier: number, golden: boolean, x: number, y: number, angle: number): RunKey {
+  private addKey(
+    tier: number,
+    golden: boolean,
+    x: number,
+    y: number,
+    angle: number,
+    caramel: CaramelPhase = 'none',
+  ): RunKey {
     const { Bodies, Body, Composite } = this.matter;
     const { width, height } = this.sizeOf(tier);
     const body = Bodies.rectangle(x, y, width, height, {
@@ -720,6 +961,8 @@ export class Run {
       prevX: x,
       prevY: y,
       prevAngle: angle,
+      caramel,
+      stuckUntil: 0,
     };
     this.nextId += 1;
     this.keyMap.set(key.id, key);
@@ -728,7 +971,13 @@ export class Run {
   }
 
   private restoreKey(saved: KeySnapshot): void {
-    const key = this.addKey(saved.tier, saved.golden, saved.x, saved.y, saved.angle);
+    const caramel = saved.caramel ?? 'none';
+    const key = this.addKey(saved.tier, saved.golden, saved.x, saved.y, saved.angle, caramel);
+    if (caramel === 'stuck') {
+      this.matter.Body.setStatic(key.body, true);
+      key.stuckUntil = this.stats.elapsedMs + (saved.stuckMs ?? 0);
+      return;
+    }
     this.matter.Body.setVelocity(key.body, { x: saved.vx, y: saved.vy });
     this.matter.Body.setAngularVelocity(key.body, saved.spin);
   }
@@ -753,21 +1002,33 @@ export class Run {
       frictionStatic: PHYSICS.frictionStatic,
       restitution: this.theme.physics.restitution,
     };
-    Composite.add(this.engine.world, [
-      Bodies.rectangle(-PHYSICS_WALL / 2, wallCenterY, PHYSICS_WALL, wallHeight, options),
-      Bodies.rectangle(width + PHYSICS_WALL / 2, wallCenterY, PHYSICS_WALL, wallHeight, options),
-      Bodies.rectangle(
-        width / 2,
-        height + PHYSICS_WALL / 2,
-        width + PHYSICS_WALL * 2,
-        PHYSICS_WALL,
-        options,
-      ),
-    ]);
+    const left = Bodies.rectangle(
+      -PHYSICS_WALL / 2,
+      wallCenterY,
+      PHYSICS_WALL,
+      wallHeight,
+      options,
+    );
+    const right = Bodies.rectangle(
+      width + PHYSICS_WALL / 2,
+      wallCenterY,
+      PHYSICS_WALL,
+      wallHeight,
+      options,
+    );
+    const floor = Bodies.rectangle(
+      width / 2,
+      height + PHYSICS_WALL / 2,
+      width + PHYSICS_WALL * 2,
+      PHYSICS_WALL,
+      options,
+    );
+    this.floorId = floor.id;
+    Composite.add(this.engine.world, [left, right, floor]);
   }
 
   private clampAim(x: number): number {
-    const half = this.sizeOf(this.queue.current.tier).width / 2;
+    const half = this.currentSize.width / 2;
     return Math.min(this.jar.width - half, Math.max(half, x));
   }
 

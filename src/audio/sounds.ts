@@ -393,3 +393,81 @@ export function playRain(voice: Voice): number {
   }
   return length;
 }
+
+/** «Карамелька» прилипла к стенке: тягучее «тянь». */
+export function playStick(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'lowpass',
+    freq: 520,
+    decay: 0.12,
+    gain: 0.16,
+  });
+  return tone(voice.ctx, voice.out, {
+    freq: 330,
+    freqEnd: 196,
+    glide: 0.18,
+    decay: 0.24,
+    gain: 0.28,
+    vibrato: { rate: 9, depth: 0.05 },
+  });
+}
+
+/** «Карамелька» отлипла: пружинка вверх. */
+export function playUnstick(voice: Voice): number {
+  return tone(voice.ctx, voice.out, {
+    freq: 260,
+    freqEnd: 620,
+    glide: 0.12,
+    decay: 0.2,
+    gain: 0.26,
+    vibrato: { rate: 14, depth: 0.06 },
+  });
+}
+
+/** «Метеорчик» полетел: тихий свист вниз с блеском. */
+export function playMeteorDrop(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'highpass',
+    freq: 5000,
+    attack: 0.05,
+    decay: 0.3,
+    gain: 0.05,
+  });
+  return tone(voice.ctx, voice.out, { freq: 1500, freqEnd: 700, decay: 0.42, gain: 0.1 });
+}
+
+/**
+ * «Метеорчик» попал в клавишу: каскад колокольчиков вверх и шелест блёсток. Без «взрыва»
+ * и низкого удара: игра 0+ (п. 3.4.2), клавиша не ломается, а улетает с блёстками.
+ */
+export function playMeteorHit(voice: Voice): number {
+  noise(voice.ctx, voice.out, voice.noise, {
+    filter: 'bandpass',
+    freq: 3000,
+    freqEnd: 6000,
+    q: 0.9,
+    attack: 0.02,
+    decay: 0.4,
+    gain: 0.08,
+  });
+  let length = 0;
+  [784, 988, 1175, 1568].forEach((freq, index) => {
+    length = tone(voice.ctx, voice.out, {
+      type: 'triangle',
+      freq,
+      decay: 0.22,
+      gain: 0.16,
+      delay: index * 0.06,
+    });
+  });
+  return length;
+}
+
+/** «Метеорчик» рассыпался на дне: три тихие искорки. */
+export function playMeteorGone(voice: Voice): number {
+  let length = 0;
+  [2093, 1760, 1568].forEach((freq, index) => {
+    length = tone(voice.ctx, voice.out, { freq, decay: 0.1, gain: 0.06, delay: index * 0.05 });
+  });
+  return length;
+}

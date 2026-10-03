@@ -5,9 +5,13 @@ import { titleStyle } from '../scenes/titleStyle';
 import { Button, type ButtonHost } from '../ui/Button';
 import { COLORS } from '../ui/theme';
 import { Keycap } from './Keycap';
+import { MeteorView } from './Meteor';
 
 /** HUD над банкой («top») или по бокам от неё, когда экран низкий и широкий («side»). */
 export type HudMode = 'top' | 'side';
+
+/** Что показать в «Далее»: клавишу (может быть в карамельной глазури) или «Метеорчик» (диаметр). */
+export type HudPreview = { art: KeyArt; caramel: string | null } | { meteor: number };
 
 /** Какие инструменты есть в этом забеге (куплены апгрейды или остались заряды). */
 export interface HudTools {
@@ -59,7 +63,7 @@ export class RunHud {
   private readonly nextLabel: Phaser.GameObjects.Text;
   /** Клавиши в окошке «Далее» живут в своём слое, чтобы не перекрывать то, что выше HUD. */
   private readonly previewLayer: Phaser.GameObjects.Container;
-  private previews: Keycap[] = [];
+  private previews: (Keycap | MeteorView)[] = [];
   private mode: HudMode = 'top';
   private nextArea = { x: 0, y: 0, width: NEXT_SIZE, height: NEXT_SIZE };
   private scoreCenter = { x: 360, y: 62 };
@@ -149,13 +153,23 @@ export class RunHud {
     return { x: this.coinIcon.x, y: this.coinIcon.y };
   }
 
-  /** Следующие клавиши: первая крупно, вторая (с апгрейдом) — поменьше. */
-  setPreview(arts: readonly KeyArt[]): void {
+  /**
+   * Следующие клавиши: первая крупно, вторая (с апгрейдом) — поменьше. «Карамелька» — в глазури,
+   * «Метеорчик» — сам собой: игрок заранее видит, что упадёт.
+   */
+  setPreview(items: readonly HudPreview[]): void {
     this.previews.forEach((view) => view.destroy());
-    this.previews = arts.slice(0, this.slots).map((art, index) => {
-      const view = new Keycap(this.scene, art, { idle: false, random: Math.random });
+    this.previews = items.slice(0, this.slots).map((item, index) => {
       const size = index === 0 ? PREVIEW_SIZE : PREVIEW_SMALL;
-      view.baseScale = Math.min(1, size / Math.max(art.width, art.height));
+      let view: Keycap | MeteorView;
+      if ('meteor' in item) {
+        view = new MeteorView(this.scene, item.meteor, false).setTail(false);
+        view.baseScale = Math.min(1, size / item.meteor);
+      } else {
+        view = new Keycap(this.scene, item.art, { idle: false, random: Math.random });
+        if (item.caramel) view.setCaramel(item.caramel);
+        view.baseScale = Math.min(1, size / Math.max(item.art.width, item.art.height));
+      }
       view.tick(0, 0);
       this.previewLayer.add(view);
       return view;

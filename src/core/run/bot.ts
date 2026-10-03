@@ -10,6 +10,8 @@ export interface BotView {
   /** Тир и ширина висящей клавиши. */
   tier: number;
   width: number;
+  /** Над банкой «Метеорчик» (мир 3): он убирает клавишу, в которую попадёт. */
+  meteor?: boolean;
   /** Внутренняя ширина банки и высота дна. */
   jarWidth: number;
   floorY: number;
@@ -42,6 +44,13 @@ export function chooseAim(view: BotView, random: () => number, randomShare = 0.2
   const min = view.width / 2;
   const max = view.jarWidth - view.width / 2;
   if (random() < randomShare) return clampAim(view, min + random() * (max - min));
+
+  // «Метеорчик» — в самую высокую клавишу: так куча становится ниже.
+  if (view.meteor) {
+    let highest: BotKey | null = null;
+    for (const key of view.keys) if (!highest || key.top < highest.top) highest = key;
+    return clampAim(view, highest ? highest.x : (min + max) / 2);
+  }
 
   // Такая же клавиша, до которой можно долететь: её верх — на поверхности кучи.
   let target: BotKey | null = null;

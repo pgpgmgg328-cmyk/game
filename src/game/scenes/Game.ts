@@ -21,6 +21,7 @@ import {
 } from '../../themes';
 import { achievementTitle } from '../achievementText';
 import { hexToNumber } from '../art/color';
+import { caramelTexture } from '../art/specialArt';
 import { ensureFxArt, ensureThemeArt, ensureUiArt, goldenArt, type KeyArt } from '../art/textures';
 import { e2eSeed } from '../e2eParams';
 import { CoinFlights } from '../objects/CoinFlights';
@@ -28,18 +29,20 @@ import { DangerLine } from '../objects/DangerLine';
 import { FormReveal, type RevealKind } from '../objects/FormReveal';
 import { AimGuide, JarView } from '../objects/Jar';
 import { Keycap } from '../objects/Keycap';
+import { MeteorView } from '../objects/Meteor';
 import { Particles } from '../objects/Particles';
 import {
   HUD_SIDE_ROOM,
   HUD_TOOLS_HEIGHT,
   HUD_TOP_HEIGHT,
   RunHud,
+  type HudPreview,
   type HudTools,
 } from '../objects/RunHud';
 import { Toasts } from '../objects/Toasts';
 import { TutorialHand, type HintKind } from '../objects/TutorialHand';
 import { phaserMatter } from '../run/phaserMatter';
-import { Run, type RunEvent, type RunKey, type ToolId } from '../run/Run';
+import { Run, type RunEvent, type RunKey, type RunMeteor, type ToolId } from '../run/Run';
 import type { BackgroundScene } from './Background';
 import { BaseScene } from './BaseScene';
 import type { OfferData } from './Offer';
@@ -48,6 +51,10 @@ import { titleStyle } from './titleStyle';
 export interface GameSceneData {
   /** Продолжить сохранённый забег. */
   snapshot?: RunSnapshot;
+  /** Мир забега; по умолчанию — выбранный в карусели меню. */
+  world?: string;
+  /** Пробный забег в закрытом мире за рекламу (диздок, раздел 5). */
+  trial?: boolean;
 }
 
 /** Форма, открытая в забеге. golden — открылась золотая версия. */
@@ -83,6 +90,8 @@ const IMPACT_COOLDOWN_MS = 140;
 const STICKER_MS = 1600;
 /** Сколько клавиши радуются появлению Пробела. */
 const CHEER_MS = 1600;
+/** Искорки из хвоста летящего «Метеорчика» — не чаще раза в столько миллисекунд. */
+const TRAIL_MS = 70;
 
 interface Gesture {
   pointerId: number;
@@ -111,7 +120,10 @@ export class GameScene extends BaseScene {
   private stickerLayer!: Phaser.GameObjects.Container;
   private views = new Map<number, Keycap>();
   private lastImpact = new Map<number, number>();
-  private hanging: Keycap | null = null;
+  private hanging: Keycap | MeteorView | null = null;
+  /** «Метеорчик» в полёте (мир 3). */
+  private meteorView: MeteorView | null = null;
+  private trailMs = 0;
   private danger!: DangerLine;
   private guide!: AimGuide;
   private fx!: Particles;
@@ -158,7 +170,8 @@ export class GameScene extends BaseScene {
     this.resetState();
     const { ctx } = this;
     const save = ctx.save.data;
-    this.theme = getTheme(data.snapshot?.world ?? DEFAULT_THEME_ID) ?? THEMES[0]!;
+    const world = data.snapshot?.world ?? data.world ?? save.worlds.selected;
+    this.theme = getTheme(world) ?? getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
     (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
     this.art = ensureThemeArt(this, this.theme, ctx.lang);
     ensureFxArt(this);
@@ -173,6 +186,7 @@ export class GameScene extends BaseScene {
       spawn: { ...SPAWN, weights: ctx.flags.spawnWeights },
       // Первые клавиши обучения: первое слияние — на втором-третьем броске (диздок, раздел 9).
       opening: this.dragTutorial && !data.snapshot ? TUTORIAL.openingTiers : undefined,
+      trial: data.trial,
     });
     this.nextSquishHintAt = Math.max(TUTORIAL.squishHintAfterMs, this.run.elapsedMs + 5000);
     this.best = save.stats.bestScore;
@@ -203,6 +217,8 @@ export class GameScene extends BaseScene {
     this.toasts = new Toasts(this, ctx.reducedMotion);
 
     for (const key of this.run.keys) this.createView(key);
+    const flying = this.run.meteorInFlight;
+    if (flying) this.createMeteorView(flying);
     this.showHanging(false);
     this.updatePreview();
     this.updateScore(true);
@@ -240,6 +256,7 @@ export class GameScene extends BaseScene {
     this.danger.tick(time, this.run.dangerMs, this.ctx.reducedMotion);
     this.views.forEach((view) => view.tick(delta, time));
     this.hanging?.tick(delta, time);
+    this.tickMeteor(delta, time, halted);
     this.tickScore(delta);
     this.updateHints(delta);
     this.tickStickers();
@@ -318,6 +335,8 @@ export class GameScene extends BaseScene {
     this.lastImpact = new Map();
     this.goldArt = new Map();
     this.hanging = null;
+    this.meteorView = null;
+    this.trailMs = 0;
     this.banner = null;
     this.gesture = null;
     this.held = new Set();
@@ -399,11 +418,36 @@ export class GameScene extends BaseScene {
 
   private createView(key: RunKey): Keycap {
     const view = this.newKeycap(key.tier, key.golden);
+    if (key.caramel === 'fresh' || key.caramel === 'stuck') {
+      view.setCaramel(caramelTexture(this, view.art));
+    }
     view.setPosition(key.body.position.x, key.body.position.y);
     view.setRotation(key.body.angle);
     this.keysLayer.add(view);
     this.views.set(key.id, view);
     return view;
+  }
+
+  private createMeteorView(meteor: RunMeteor): MeteorView {
+    this.meteorView?.destroy();
+    const view = new MeteorView(this, meteor.size, !this.ctx.reducedMotion);
+    view.setPosition(meteor.body.position.x, meteor.body.position.y);
+    this.keysLayer.add(view);
+    this.meteorView = view;
+    return view;
+  }
+
+  /** «Метеорчик» в полёте: позиция между шагами физики и искорки из хвоста. */
+  private tickMeteor(delta: number, time: number, halted: boolean): void {
+    const view = this.meteorView;
+    if (!view) return;
+    view.tick(delta, time);
+    if (halted) return;
+    this.trailMs += delta;
+    if (this.trailMs >= TRAIL_MS) {
+      this.trailMs = 0;
+      this.fx.trail(view.x + (Math.random() - 0.5) * view.size * 0.5, view.y - view.size * 0.6);
+    }
   }
 
   // ── Отрисовка состояния забега ───────────────────────────────────────────────────────
@@ -419,6 +463,15 @@ export class GameScene extends BaseScene {
       );
       view.setRotation(key.prevAngle + (angle - key.prevAngle) * alpha);
     }
+    const meteor = this.run.meteorInFlight;
+    if (meteor && this.meteorView) {
+      const { position, angle } = meteor.body;
+      this.meteorView.setPosition(
+        meteor.prevX + (position.x - meteor.prevX) * alpha,
+        meteor.prevY + (position.y - meteor.prevY) * alpha,
+      );
+      this.meteorView.setSpin(meteor.prevAngle + (angle - meteor.prevAngle) * alpha);
+    }
   }
 
   private renderHanging(time: number): void {
@@ -429,14 +482,14 @@ export class GameScene extends BaseScene {
       const bob = this.ctx.reducedMotion ? 0 : Math.sin(time / 420) * 3;
       hanging.setPosition(this.run.aimX, this.run.hangY() + bob);
     }
-    const { height } = this.run.sizeOf(this.run.currentTier);
+    const { height } = this.run.currentSize;
     const from = this.run.hangY() + height / 2;
     this.guide.draw(this.run.aimX, from, this.surfaceBelow(this.run.aimX), ready);
   }
 
   /** На какой высоте висящая клавиша встретит верх кучи (для пунктира прицела). */
   private surfaceBelow(x: number): number {
-    const half = this.run.sizeOf(this.run.currentTier).width / 2;
+    const half = this.run.currentSize.width / 2;
     let surface: number = JAR.height;
     for (const key of this.run.keys) {
       const { min, max } = key.body.bounds;
@@ -449,8 +502,15 @@ export class GameScene extends BaseScene {
   /** Висящая клавиша над банкой: появляется с «попом», когда её можно сбросить. */
   private showHanging(animate: boolean): void {
     this.hanging?.destroy();
-    const { tier, golden } = this.run.current;
-    const view = this.newKeycap(tier, golden);
+    const item = this.run.current;
+    let view: Keycap | MeteorView;
+    if (item.meteor) {
+      view = new MeteorView(this, this.run.currentSize.width, !this.ctx.reducedMotion);
+    } else {
+      const keycap = this.newKeycap(item.tier, item.golden);
+      if (item.caramel) keycap.setCaramel(caramelTexture(this, keycap.art));
+      view = keycap;
+    }
     view.setPosition(this.run.aimX, this.run.hangY());
     this.keysLayer.add(view);
     this.hanging = view;
@@ -461,7 +521,13 @@ export class GameScene extends BaseScene {
   }
 
   private updatePreview(): void {
-    this.hud.setPreview(this.run.upcoming.map((item) => this.artFor(item.tier, item.golden)));
+    this.hud.setPreview(
+      this.run.upcoming.map((item): HudPreview => {
+        if (item.meteor) return { meteor: this.run.itemSize(item).width };
+        const art = this.artFor(item.tier, item.golden);
+        return { art, caramel: item.caramel ? caramelTexture(this, art) : null };
+      }),
+    );
   }
 
   private updateScore(immediate: boolean): void {
@@ -555,6 +621,36 @@ export class GameScene extends BaseScene {
         break;
       case 'danger':
         this.danger.setWarning(event.warning);
+        break;
+      case 'stick': {
+        const view = this.views.get(event.key.id);
+        view?.squash(0.6);
+        view?.showFace('squish', 500);
+        this.fx.drips(event.key.body.position.x, event.key.body.position.y);
+        this.ctx.audio.stick();
+        break;
+      }
+      case 'unstick': {
+        const view = this.views.get(event.key.id);
+        view?.meltCaramel(this.ctx.reducedMotion);
+        view?.squash(-0.3);
+        this.fx.drips(event.key.body.position.x, event.key.body.position.y);
+        this.ctx.audio.unstick();
+        break;
+      }
+      case 'meteorDrop':
+        this.hanging?.destroy();
+        this.hanging = null;
+        this.createMeteorView(event.meteor);
+        this.updatePreview();
+        this.ctx.audio.meteorDrop();
+        break;
+      case 'meteorHit':
+        this.onMeteorHit(event.key, event.x, event.y);
+        break;
+      case 'meteorGone':
+        this.removeMeteorView(event.x, event.y);
+        this.ctx.audio.meteorGone();
         break;
       case 'gameover':
         this.onOverflow();
@@ -657,6 +753,57 @@ export class GameScene extends BaseScene {
       alpha: 0,
       angle: view.angle + 90,
       duration: 240,
+      ease: 'Back.easeIn',
+      onComplete: () => view.destroy(),
+    });
+  }
+
+  /**
+   * «Метеорчик» попал в клавишу: она не ломается, а мягко улетает вверх с блёстками
+   * (игра 0+: без взрывов и обломков).
+   */
+  private onMeteorHit(key: RunKey, x: number, y: number): void {
+    this.removeMeteorView(x, y);
+    const view = this.views.get(key.id);
+    this.views.delete(key.id);
+    this.lastImpact.delete(key.id);
+    const color = hexToNumber(this.artFor(key.tier, key.golden).colors.base);
+    this.fx.stardust(key.body.position.x, key.body.position.y, color);
+    this.ctx.audio.meteorHit();
+    if (!view) return;
+    if (this.ctx.reducedMotion) {
+      view.destroy();
+      return;
+    }
+    view.showFace('joy', 600);
+    this.tweens.add({
+      targets: view,
+      y: view.y - 160,
+      angle: view.angle + (Math.random() < 0.5 ? -40 : 40),
+      pop: 0.4,
+      alpha: 0,
+      duration: 650,
+      ease: 'Quad.easeOut',
+      onComplete: () => view.destroy(),
+    });
+  }
+
+  /** «Метеорчик» исчезает с искорками: попал в клавишу или долетел до дна. */
+  private removeMeteorView(x: number, y: number): void {
+    const view = this.meteorView;
+    this.meteorView = null;
+    this.fx.stardust(x, y, 0xc9b6ff);
+    if (!view) return;
+    if (this.ctx.reducedMotion) {
+      view.destroy();
+      return;
+    }
+    view.setTail(false);
+    this.tweens.add({
+      targets: view,
+      pop: 0,
+      alpha: 0,
+      duration: 220,
       ease: 'Back.easeIn',
       onComplete: () => view.destroy(),
     });
@@ -841,6 +988,7 @@ export class GameScene extends BaseScene {
    * Если такой клавиши нет — просто ведёт в сторону, чтобы было видно «веди → отпусти».
    */
   private showDragHint(): void {
+    if (this.run.current.meteor) return;
     const { tier, golden } = this.run.current;
     const width = this.run.jar.width;
     const size = this.run.sizeOf(tier);
@@ -1253,7 +1401,8 @@ export class GameScene extends BaseScene {
     }));
     return {
       tier: this.run.currentTier,
-      width: this.run.sizeOf(this.run.currentTier).width,
+      width: this.run.currentSize.width,
+      meteor: this.run.current.meteor === true,
       jarWidth: this.run.jar.width,
       floorY: this.run.jar.height,
       keys,
@@ -1276,7 +1425,11 @@ export class GameScene extends BaseScene {
 
   /** Состояние забега для проверок. */
   debugState(): {
-    keys: { id: number; tier: number; golden: boolean; x: number; y: number }[];
+    keys: { id: number; tier: number; golden: boolean; x: number; y: number; caramel: string }[];
+    world: string;
+    trial: boolean;
+    special: 'caramel' | 'meteor' | null;
+    meteor: boolean;
     score: number;
     over: boolean;
     ending: boolean;
@@ -1306,7 +1459,12 @@ export class GameScene extends BaseScene {
         golden: key.golden,
         x: key.body.position.x,
         y: key.body.position.y,
+        caramel: key.caramel,
       })),
+      world: this.theme.id,
+      trial: this.run.trial,
+      special: this.run.current.meteor ? 'meteor' : this.run.current.caramel ? 'caramel' : null,
+      meteor: this.run.meteorInFlight !== null,
       score: this.run.score,
       over: this.run.over,
       ending: this.ending,
@@ -1342,6 +1500,12 @@ export class GameScene extends BaseScene {
 
   debugSetCurrent(tier: number, golden = false): void {
     this.run.setCurrentTier(tier, golden);
+    this.showHanging(false);
+  }
+
+  /** Повесить над банкой «Карамельку» или «Метеорчик» (автотесты и скриншоты). */
+  debugSetSpecial(kind: 'caramel' | 'meteor', tier = 1): void {
+    this.run.setCurrentSpecial(kind, tier);
     this.showHanging(false);
   }
 

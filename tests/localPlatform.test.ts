@@ -69,7 +69,7 @@ describe('LocalPlatform', () => {
     const platform = await platformWith(storage);
     expect(platform.loadRunSnapshot()).toBeNull();
     const snapshot = {
-      v: 3 as const,
+      v: 4 as const,
       world: 'classic',
       seed: 1,
       rng: 2,
@@ -89,6 +89,9 @@ describe('LocalPlatform', () => {
       removes: 0,
       adBonuses: { revive: false, shake: false, remove: false },
       keys: [],
+      meteorAt: 0,
+      meteor: null,
+      trial: false,
     };
     platform.saveRunSnapshot(snapshot);
     expect(storage.items.has(RUN_STORAGE_KEY)).toBe(true);

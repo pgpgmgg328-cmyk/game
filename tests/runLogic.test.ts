@@ -113,6 +113,43 @@ describe('спавн', () => {
   });
 });
 
+describe('особые клавиши в очереди (диздок, раздел 5)', () => {
+  const plain = { preview: 1, goldenChance: 0.02 };
+
+  it('без «Карамельки» очередь та же, что раньше: лишние случайные числа не тратятся', () => {
+    const before = new KeyQueue(new Rng(9), SPAWN, plain);
+    const now = new KeyQueue(new Rng(9), SPAWN, { ...plain, caramelChance: 0, meteorEveryMs: 0 });
+    for (let i = 0; i < 50; i += 1) expect(now.advance(10)).toEqual(before.advance(10));
+  });
+
+  it('«Карамелька» выпадает с шансом из данных мира', () => {
+    const queue = new KeyQueue(new Rng(9), SPAWN, { ...plain, caramelChance: 0.06 });
+    let caramels = 0;
+    for (let i = 0; i < 4000; i += 1) if (queue.advance(10).caramel) caramels += 1;
+    expect(caramels / 4000).toBeGreaterThan(0.045);
+    expect(caramels / 4000).toBeLessThan(0.075);
+  });
+
+  it('«Метеорчик» встаёт в конец очереди раз в 45 с, отсчёт переживает снимок', () => {
+    const queue = new KeyQueue(new Rng(3), SPAWN, { ...plain, meteorEveryMs: 45_000 });
+    const meteorsAt: number[] = [];
+    for (let sec = 1; sec <= 140; sec += 1) {
+      queue.advance(sec);
+      if (queue.upcoming.at(-1)?.meteor) meteorsAt.push(sec);
+      if (sec === 60) {
+        const restored = new KeyQueue(
+          new Rng(1),
+          SPAWN,
+          { ...plain, meteorEveryMs: 45_000 },
+          queue.state,
+        );
+        expect(restored.state.meteorAt).toBe(queue.state.meteorAt);
+      }
+    }
+    expect(meteorsAt).toEqual([45, 90, 135]);
+  });
+});
+
 describe('слияния', () => {
   it('две одинаковые клавиши дают следующий тир, два Пробела — мега-клац', () => {
     expect(mergeResult(1, 11)).toEqual({ kind: 'form', tier: 2 });
@@ -241,7 +278,7 @@ describe('комбо и перезарядка', () => {
 describe('снимок забега', () => {
   const limits = { maxTier: 11, maxKeys: 150 };
   const valid: RunSnapshot = {
-    v: 3,
+    v: 4,
     world: 'classic',
     seed: 12345,
     rng: 4000000000,
@@ -261,19 +298,46 @@ describe('снимок забега', () => {
     removes: 0,
     adBonuses: { revive: true, shake: false, remove: true },
     keys: [{ tier: 3, golden: true, x: 100.25, y: 700, angle: 0.1, vx: 0, vy: -0.5, spin: 0 }],
+    meteorAt: 0,
+    meteor: null,
+    trial: false,
+  };
+
+  /** Снимок мира с особыми клавишами: «Карамельки» в банке и «Метеорчик» в полёте. */
+  const special: RunSnapshot = {
+    ...valid,
+    world: 'space',
+    current: { tier: 1, golden: false, meteor: true },
+    upcoming: [{ tier: 2, golden: false, caramel: true }],
+    keys: [
+      { ...valid.keys[0]!, caramel: 'fresh' },
+      { ...valid.keys[0]!, caramel: 'stuck', stuckMs: 1200 },
+    ],
+    meteorAt: 90_000,
+    meteor: { x: 300, y: -60, vx: 0, vy: 2.5 },
+    trial: true,
   };
 
   it('правильный снимок читается как есть', () => {
     expect(readRunSnapshot(JSON.parse(JSON.stringify(valid)), limits)).toEqual(valid);
   });
 
+  it('снимок с «Карамельками», «Метеорчиком» и пробным забегом читается как есть', () => {
+    expect(readRunSnapshot(JSON.parse(JSON.stringify(special)), limits)).toEqual(special);
+  });
+
   it('снимок v2 (до бонусов за рекламу) читается: бонусов ещё не было', () => {
-    const { adBonuses: _bonuses, ...rest } = valid;
+    const { adBonuses: _bonuses, meteorAt: _at, meteor: _meteor, trial: _trial, ...rest } = valid;
     const old = { ...rest, v: 2 };
     expect(readRunSnapshot(old, limits)).toEqual({
       ...valid,
       adBonuses: { revive: false, shake: false, remove: false },
     });
+  });
+
+  it('снимок v3 (до особых клавиш) читается: «Метеорчика» нет, забег не пробный', () => {
+    const { meteorAt: _at, meteor: _meteor, trial: _trial, ...rest } = valid;
+    expect(readRunSnapshot({ ...rest, v: 3 }, limits)).toEqual(valid);
   });
 
   it('продолжить предлагается только целый забег известного мира, где уже был сброс', () => {
@@ -315,7 +379,16 @@ describe('снимок забега', () => {
       { ...valid, keys: new Array(151).fill(valid.keys[0]) },
       { ...valid, adBonuses: null },
       { ...valid, adBonuses: { revive: 'да', shake: false, remove: false } },
-      { ...valid, v: 4 },
+      { ...valid, v: 5 },
+      { ...valid, current: { tier: 2, golden: false, meteor: 'да' } },
+      { ...special, keys: [{ ...valid.keys[0], caramel: 'липкая' }] },
+      { ...special, keys: [{ ...valid.keys[0], caramel: 'stuck' }] },
+      { ...special, keys: [{ ...valid.keys[0], caramel: 'stuck', stuckMs: -5 }] },
+      { ...special, keys: [{ ...valid.keys[0], caramel: 'stuck', stuckMs: 1e9 }] },
+      { ...special, meteorAt: -1 },
+      { ...special, meteor: { x: 1, y: 2, vx: 'быстро', vy: 0 } },
+      { ...special, meteor: 7 },
+      { ...special, trial: 'да' },
     ];
     broken.forEach((raw) => expect(readRunSnapshot(raw, limits)).toBeNull());
   });

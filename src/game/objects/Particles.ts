@@ -142,6 +142,29 @@ export class Particles {
     this.stars.explode(this.reducedMotion ? 4 : 8, x, y);
   }
 
+  /** «Метеорчик» попал в клавишу: облачко блёсток и звёздочек, без огня и обломков. */
+  stardust(x: number, y: number, color: number): void {
+    this.sparkles.setParticleTint(0xfff2a8);
+    this.sparkles.explode(this.reducedMotion ? 6 : 14, x, y);
+    this.stars.setParticleTint(color);
+    this.stars.explode(this.reducedMotion ? 4 : 9, x, y);
+    this.puffs.setParticleTint(0xe9e2ff);
+    this.puffs.explode(this.reducedMotion ? 3 : 6, x, y);
+  }
+
+  /** Искорка из хвоста летящего «Метеорчика». */
+  trail(x: number, y: number): void {
+    if (this.reducedMotion) return;
+    this.sparkles.setParticleTint(0xfff2a8);
+    this.sparkles.explode(1, x, y);
+  }
+
+  /** Капельки карамели: «Карамелька» прилипла или отлипла. */
+  drips(x: number, y: number): void {
+    this.puffs.setParticleTint(0xf0a43c);
+    this.puffs.explode(this.reducedMotion ? 3 : 6, x, y);
+  }
+
   /** Тап-сквиш: пара искорок. */
   squish(x: number, y: number): void {
     this.sparkles.setParticleTint(0xffffff);

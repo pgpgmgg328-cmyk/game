@@ -45,10 +45,15 @@ export function pickTier(weights: readonly number[], random: number): number {
   return 1;
 }
 
-/** Клавиша в очереди: тир и золотая ли она (диздок, раздел 3). */
+/**
+ * Клавиша в очереди: тир и золотая ли она (диздок, раздел 3). Особые клавиши миров (раздел 5):
+ * «Карамелька» — обычная клавиша в карамели, «Метеорчик» — вместо клавиши (тир у него 1).
+ */
 export interface QueueItem {
   tier: number;
   golden: boolean;
+  caramel?: boolean;
+  meteor?: boolean;
 }
 
 export interface QueueOptions {
@@ -58,6 +63,10 @@ export interface QueueOptions {
   goldenChance: number;
   /** Первые тиры по порядку (обучение), дальше — случайные. Они не бывают золотыми. */
   opening?: readonly number[];
+  /** Шанс «Карамельки» (мир 2); 0 или нет — не бывает. */
+  caramelChance?: number;
+  /** «Метеорчик» раз в столько миллисекунд игры (мир 3); 0 или нет — не бывает. */
+  meteorEveryMs?: number;
 }
 
 /** Очередь клавиш: текущая висит над банкой, следующие видны в превью «Далее». */
@@ -65,14 +74,21 @@ export class KeyQueue {
   private readonly rng: Rng;
   private readonly schedule: SpawnSchedule;
   private readonly goldenChance: number;
+  private readonly caramelChance: number;
+  private readonly meteorEveryMs: number;
   private readonly opening: number[];
   private currentItem: QueueItem;
   private readonly next: QueueItem[];
+  /** Когда (время игры, мс) в очередь встанет следующий «Метеорчик». */
+  private meteorAt: number;
 
   constructor(rng: Rng, schedule: SpawnSchedule, options: QueueOptions, restore?: KeyQueueState) {
     this.rng = rng;
     this.schedule = schedule;
     this.goldenChance = options.goldenChance;
+    this.caramelChance = Math.max(0, options.caramelChance ?? 0);
+    this.meteorEveryMs = Math.max(0, options.meteorEveryMs ?? 0);
+    this.meteorAt = restore?.meteorAt ?? this.meteorEveryMs;
     this.opening = restore ? [] : [...(options.opening ?? [])];
     if (restore) {
       this.currentItem = { ...restore.current };
@@ -98,12 +114,18 @@ export class KeyQueue {
     return {
       current: { ...this.currentItem },
       upcoming: this.next.map((item) => ({ ...item })),
+      meteorAt: this.meteorAt,
     };
   }
 
   /** Заменить висящую клавишу (обучение, автотесты). Очередь не меняется. */
   replaceCurrent(tier: number, golden = false): void {
     this.currentItem = { tier, golden };
+  }
+
+  /** Заменить висящую клавишу любой, в том числе особой (автотесты). */
+  replaceCurrentItem(item: QueueItem): void {
+    this.currentItem = { ...item };
   }
 
   /** Текущая клавиша сброшена: следующая встаёт на её место, в конец очереди добавляется новая. */
@@ -117,12 +139,24 @@ export class KeyQueue {
   private pick(elapsedSec: number): QueueItem {
     const scripted = this.opening.shift();
     if (scripted !== undefined) return { tier: scripted, golden: false };
+    // «Метеорчик» не чаще раза в meteorEveryMs: отсчёт — от того, как прошлый встал в очередь.
+    if (this.meteorEveryMs > 0 && elapsedSec * 1000 >= this.meteorAt) {
+      this.meteorAt = elapsedSec * 1000 + this.meteorEveryMs;
+      return { tier: 1, golden: false, meteor: true };
+    }
     const tier = pickTier(spawnWeightsAt(this.schedule, elapsedSec), this.rng.next());
-    return { tier, golden: this.rng.next() < this.goldenChance };
+    const golden = this.rng.next() < this.goldenChance;
+    // В мирах без «Карамельки» лишнее случайное число не тратится: очередь мира 1 не меняется.
+    if (this.caramelChance > 0 && this.rng.next() < this.caramelChance) {
+      return { tier, golden, caramel: true };
+    }
+    return { tier, golden };
   }
 }
 
 export interface KeyQueueState {
   current: QueueItem;
   upcoming: QueueItem[];
+  /** Когда встанет в очередь следующий «Метеорчик»; нет — с начала (первый через meteorEveryMs). */
+  meteorAt?: number;
 }

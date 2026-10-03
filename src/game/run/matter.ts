@@ -22,6 +22,7 @@ export interface MatterBody {
   readonly bounds: { readonly min: MatterVector; readonly max: MatterVector };
   /** Для простых тел — само тело. */
   readonly parent: MatterBody;
+  readonly isStatic: boolean;
 }
 
 export interface MatterComposite {
@@ -68,11 +69,14 @@ export interface MatterModule {
       height: number,
       options?: MatterBodyOptions,
     ): MatterBody;
+    circle(x: number, y: number, radius: number, options?: MatterBodyOptions): MatterBody;
   };
   Body: {
     setVelocity(body: MatterBody, velocity: MatterVector): void;
     setAngularVelocity(body: MatterBody, velocity: number): void;
     setInertia(body: MatterBody, inertia: number): void;
+    /** Сделать тело неподвижным и обратно (масса и инерция восстанавливаются). */
+    setStatic(body: MatterBody, isStatic: boolean): void;
   };
   Composite: {
     add(composite: MatterComposite, object: MatterBody | MatterBody[]): void;

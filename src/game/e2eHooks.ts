@@ -66,6 +66,8 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     placeKey: (tier: number, x: number, y: number, golden = false) =>
       gameScene()?.debugPlaceKey(tier, x, y, golden),
     setCurrent: (tier: number, golden = false) => gameScene()?.debugSetCurrent(tier, golden),
+    /** Повесить над банкой «Карамельку» (тир) или «Метеорчик». */
+    setSpecial: (kind: 'caramel' | 'meteor', tier = 1) => gameScene()?.debugSetSpecial(kind, tier),
     step: (steps: number) => gameScene()?.debugStep(steps),
     freeze: (frozen: boolean) => gameScene()?.debugFreeze(frozen),
     endRun: () => gameScene()?.debugEndRun(),

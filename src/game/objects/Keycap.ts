@@ -52,6 +52,8 @@ export class Keycap extends Phaser.GameObjects.Container {
   private frameHold = 0;
   private heldFrame: FaceFrame = 'open';
   private readonly glints: Glint[] = [];
+  /** Карамельная глазурь «Карамельки» (мир 2) — между колпачком и лицом. */
+  private caramel: Phaser.GameObjects.Image | null = null;
   /** Общий масштаб поверх сплющивания: для появления и исчезновения. */
   pop = 1;
   /** Постоянный масштаб (например, маленькая клавиша в превью «Далее»). */
@@ -86,7 +88,45 @@ export class Keycap extends Phaser.GameObjects.Container {
     return this;
   }
 
-  /** Удар или тап: amount 0…1 — насколько сильно сплющить. Отрицательный — вытянуть. */
+  /** Надеть карамельную глазурь (текстура из art/specialArt.ts) или снять её (null). */
+  setCaramel(texture: string | null): this {
+    if (texture === null) {
+      this.caramel?.destroy();
+      this.caramel = null;
+      return this;
+    }
+    if (!this.caramel) {
+      this.caramel = new Phaser.GameObjects.Image(this.scene, 0, 0, texture);
+      this.caramel.setScale(1 / TEXTURE_SCALE);
+      this.addAt(this.caramel, 1);
+    }
+    return this;
+  }
+
+  get hasCaramel(): boolean {
+    return this.caramel !== null;
+  }
+
+  /** «Карамелька» отлипла: глазурь тает и стекает вниз. */
+  meltCaramel(reducedMotion: boolean): void {
+    const caramel = this.caramel;
+    if (!caramel) return;
+    this.caramel = null;
+    if (reducedMotion) {
+      caramel.destroy();
+      return;
+    }
+    this.scene.tweens.add({
+      targets: caramel,
+      alpha: 0,
+      y: this.art.height * 0.25,
+      duration: 500,
+      ease: 'Quad.easeIn',
+      onComplete: () => caramel.destroy(),
+    });
+  }
+
+  /** Удар или тап: amount 0…1 — насколько сплющить. Отрицательный — вытянуть. */
   squash(amount: number): void {
     this.squashSpeed += Math.max(-1, Math.min(1, amount)) * 7;
   }

@@ -1,8 +1,14 @@
 import { isJsonObject } from '../save/schema';
 import type { QueueItem } from './spawn';
 
-/** Версия формата снимка. Снимки v2 тоже читаются: в них ещё не было бонусов за рекламу. */
-export const RUN_SNAPSHOT_VERSION = 3;
+/**
+ * Версия формата снимка. Старые тоже читаются: в v2 ещё не было бонусов за рекламу,
+ * в v3 — особых клавиш миров и пробного забега.
+ */
+export const RUN_SNAPSHOT_VERSION = 4;
+
+/** «Карамелька» в банке: ещё не прилипала или держится за стенку (диздок, раздел 5). */
+export type CaramelState = 'fresh' | 'stuck';
 
 /** Клавиша в банке: тир, золотая ли, положение, поворот и скорости. */
 export interface KeySnapshot {
@@ -14,6 +20,18 @@ export interface KeySnapshot {
   vx: number;
   vy: number;
   spin: number;
+  /** «Карамелька»: нет — обычная клавиша (или карамель уже отлипла). */
+  caramel?: CaramelState;
+  /** Сколько ещё держаться за стенку, мс (у прилипшей). */
+  stuckMs?: number;
+}
+
+/** «Метеорчик» в полёте. */
+export interface MeteorSnapshot {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 }
 
 /** Что апгрейды дали этому забегу: после перезагрузки забег продолжится с теми же условиями. */
@@ -72,6 +90,11 @@ export interface RunSnapshot {
   /** Какие бонусы за рекламу уже взяты: после перезагрузки их не дадут второй раз. */
   adBonuses: AdBonuses;
   keys: KeySnapshot[];
+  /** Когда в очередь встанет следующий «Метеорчик» (время игры, мс). */
+  meteorAt: number;
+  meteor: MeteorSnapshot | null;
+  /** Пробный забег в закрытом мире за рекламу (диздок, раздел 5). */
+  trial: boolean;
 }
 
 export interface SnapshotLimits {
@@ -98,23 +121,51 @@ function isTier(value: unknown, maxTier: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= maxTier;
 }
 
+function optionalFlag(value: unknown): boolean | null {
+  if (value === undefined) return false;
+  return typeof value === 'boolean' ? value : null;
+}
+
 function readItem(raw: unknown, maxTier: number): QueueItem | null {
   if (!isJsonObject(raw) || !isTier(raw.tier, maxTier) || typeof raw.golden !== 'boolean') {
     return null;
   }
-  return { tier: raw.tier, golden: raw.golden };
+  const caramel = optionalFlag(raw.caramel);
+  const meteor = optionalFlag(raw.meteor);
+  if (caramel === null || meteor === null) return null;
+  const item: QueueItem = { tier: raw.tier, golden: raw.golden };
+  if (caramel) item.caramel = true;
+  if (meteor) item.meteor = true;
+  return item;
 }
 
+/** Не дольше этого «Карамелька» не держится за стенку даже в будущих мирах. */
+const MAX_STUCK_MS = 60_000;
+
 function readKey(raw: unknown, maxTier: number): KeySnapshot | null {
-  const item = readItem(raw, maxTier);
-  if (!item || !isJsonObject(raw)) return null;
-  const { x, y, angle, vx, vy, spin } = raw;
+  if (!isJsonObject(raw) || !isTier(raw.tier, maxTier) || typeof raw.golden !== 'boolean') {
+    return null;
+  }
+  const { x, y, angle, vx, vy, spin, caramel, stuckMs } = raw;
   if (!isWithin(x, MAX_COORDINATE) || !isWithin(y, MAX_COORDINATE)) return null;
   if (!isWithin(angle, MAX_COORDINATE)) return null;
   if (!isWithin(vx, MAX_SPEED) || !isWithin(vy, MAX_SPEED) || !isWithin(spin, MAX_SPEED)) {
     return null;
   }
-  return { ...item, x, y, angle, vx, vy, spin };
+  const key: KeySnapshot = { tier: raw.tier, golden: raw.golden, x, y, angle, vx, vy, spin };
+  if (caramel === undefined) return key;
+  if (caramel === 'fresh') return { ...key, caramel };
+  if (caramel !== 'stuck' || !isWithin(stuckMs, MAX_STUCK_MS) || stuckMs < 0) return null;
+  return { ...key, caramel, stuckMs };
+}
+
+function readMeteor(raw: unknown): MeteorSnapshot | null | undefined {
+  if (raw === undefined || raw === null) return null;
+  if (!isJsonObject(raw)) return undefined;
+  const { x, y, vx, vy } = raw;
+  if (!isWithin(x, MAX_COORDINATE) || !isWithin(y, MAX_COORDINATE)) return undefined;
+  if (!isWithin(vx, MAX_SPEED) || !isWithin(vy, MAX_SPEED)) return undefined;
+  return { x, y, vx, vy };
 }
 
 /** Бонусы за рекламу; в снимке v2 их ещё не было — значит, не брались. */
@@ -143,7 +194,7 @@ function readModifiers(raw: unknown): SnapshotModifiers | null {
  * тогда игра просто не предлагает продолжить забег и не падает.
  */
 export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapshot | null {
-  if (!isJsonObject(raw) || (raw.v !== 2 && raw.v !== RUN_SNAPSHOT_VERSION)) return null;
+  if (!isJsonObject(raw) || ![2, 3, RUN_SNAPSHOT_VERSION].includes(raw.v as number)) return null;
   const { world, seed, rng, score, elapsedMs, drops, merges, goldenMerges, megas, coins } = raw;
   if (typeof world !== 'string' || world === '') return null;
   if (!isUint32(seed) || !isUint32(rng)) return null;
@@ -172,6 +223,13 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
     if (!key) return null;
     keys.push(key);
   }
+  // До v4 особых клавиш и пробных забегов не было.
+  const meteorAt = raw.meteorAt === undefined ? 0 : raw.meteorAt;
+  if (!isCounter(meteorAt)) return null;
+  const meteor = readMeteor(raw.meteor);
+  if (meteor === undefined) return null;
+  const trial = optionalFlag(raw.trial);
+  if (trial === null) return null;
   return {
     v: RUN_SNAPSHOT_VERSION,
     world,
@@ -193,6 +251,9 @@ export function readRunSnapshot(raw: unknown, limits: SnapshotLimits): RunSnapsh
     removes: raw.removes as number,
     adBonuses,
     keys,
+    meteorAt,
+    meteor,
+    trial,
   };
 }
 

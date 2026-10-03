@@ -12,6 +12,9 @@ import {
   playLand,
   playLegendary,
   playMega,
+  playMeteorDrop,
+  playMeteorGone,
+  playMeteorHit,
   playNewForm,
   playNote,
   playPoof,
@@ -19,8 +22,10 @@ import {
   playRecord,
   playShake,
   playSquish,
+  playStick,
   playTick,
   playUi,
+  playUnstick,
   type Voice,
 } from './sounds';
 import { createNoiseBuffer } from './synth';
@@ -176,6 +181,28 @@ export class AudioEngine {
 
   rain(): void {
     this.play(true, 0.6, playRain);
+  }
+
+  /** «Карамелька» прилипла и отлипла (мир 2). */
+  stick(): void {
+    this.play(true, 0.3, playStick);
+  }
+
+  unstick(): void {
+    this.play(true, 0.25, playUnstick);
+  }
+
+  /** «Метеорчик» (мир 3): полетел, попал в клавишу, рассыпался на дне. */
+  meteorDrop(): void {
+    this.play(true, 0.45, playMeteorDrop);
+  }
+
+  meteorHit(): void {
+    this.play(true, 0.5, playMeteorHit);
+  }
+
+  meteorGone(): void {
+    this.play(false, 0.25, playMeteorGone);
   }
 
   // ── Внутреннее ───────────────────────────────────────────────────────────────────────
