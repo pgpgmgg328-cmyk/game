@@ -136,5 +136,14 @@
   "daily.gift.tomorrow": "Новый подарок завтра",
   "game.dailyDone": "Клавиша дня — готово!",
   "game.rainbowJar": "Банка «Радуга» твоя!",
-  "result.dailyDone": "Клавиша дня"
+  "result.dailyDone": "Клавиша дня",
+  "shop.skins_pack.title": "Набор украшений",
+  "shop.skins_pack.text": "3 банки: Леденец, Звёздочки и Облачко. 2 фона: Конфетти и Облака.",
+  "shop.decor": "Украшения",
+  "shop.jars": "Банки",
+  "shop.backgrounds": "Фоны",
+  "decor.select": "Выбрать",
+  "decor.selected": "Выбрано",
+  "decor.source.pack": "Есть в «Наборе украшений»",
+  "decor.source.streak": "За 7 дней заданий подряд"
 }

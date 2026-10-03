@@ -8,6 +8,7 @@ import {
   type AchievementDef,
 } from '../../core/meta/achievements';
 import { discoverForm, isDiscovered } from '../../core/meta/album';
+import { activeDecor } from '../../core/meta/decor';
 import { worldUnlockedBy } from '../../core/meta/worlds';
 import { runModifiers } from '../../core/meta/upgrades';
 import type { RunSnapshot } from '../../core/run/snapshot';
@@ -20,6 +21,7 @@ import {
   maxTier,
   type ThemeData,
 } from '../../themes';
+import { JAR_SKINS } from '../../themes/decor';
 import { achievementTitle } from '../achievementText';
 import { hexToNumber } from '../art/color';
 import { caramelTexture } from '../art/specialArt';
@@ -120,6 +122,8 @@ interface Sticker {
 export class GameScene extends BaseScene {
   private run!: Run;
   private theme!: ThemeData;
+  /** Украшение банки этого забега. */
+  private jarSkin = JAR_SKINS[0]!;
   private art: KeyArt[] = [];
   private goldArt = new Map<number, KeyArt>();
   private jarRoot!: Phaser.GameObjects.Container;
@@ -367,7 +371,8 @@ export class GameScene extends BaseScene {
   }
 
   private buildJar(): void {
-    const jar = new JarView(this, this.run.jar, this.theme.palette);
+    this.jarSkin = activeDecor(this.ctx.save.data, JAR_SKINS);
+    const jar = new JarView(this, this.run.jar, this.theme.palette, this.jarSkin);
     this.danger = new DangerLine(this, this.run.jar, this.theme.palette);
     this.guide = new AimGuide(this, this.theme.palette);
     this.fx = new Particles(this, this.ctx.reducedMotion);
@@ -1483,6 +1488,8 @@ export class GameScene extends BaseScene {
   debugState(): {
     keys: { id: number; tier: number; golden: boolean; x: number; y: number; caramel: string }[];
     world: string;
+    /** Украшение банки (themes/decor.ts). */
+    jar: string;
     trial: boolean;
     special: 'caramel' | 'meteor' | null;
     meteor: boolean;
@@ -1518,6 +1525,7 @@ export class GameScene extends BaseScene {
         caramel: key.caramel,
       })),
       world: this.theme.id,
+      jar: this.jarSkin.id,
       trial: this.run.trial,
       special: this.run.current.meteor ? 'meteor' : this.run.current.caramel ? 'caramel' : null,
       meteor: this.run.meteorInFlight !== null,

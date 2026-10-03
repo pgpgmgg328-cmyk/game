@@ -8,6 +8,7 @@ import {
   openGame,
   patchSave,
   press,
+  scrollToButton,
   sdkCalls,
   sdkNames,
   useFakeSdk,
@@ -18,12 +19,17 @@ import {
 interface ShopState {
   status: string | null;
   cards: { id: string; price: string; currencyIcon: boolean; owned: boolean }[];
+  decor: { id: string; kind: string; owned: boolean; selected: boolean }[];
 }
 
 interface SaveState {
   coins: number;
   purchases: { noAds: boolean; skinsPack: boolean; granted: string[] };
+  decor: { jar: string; background: string };
+  daily: Record<string, unknown>;
 }
+
+const ids = (items: { id: string }[]): string[] => items.map((item) => item.id);
 
 async function openShop(page: Page): Promise<ShopState> {
   await press(page, 'menu.shop');
@@ -64,9 +70,21 @@ test.describe('покупки (поддельный SDK)', () => {
     expect(shop).toBeNull();
     const state = await openShop(page);
     expect(state.status).toBeNull();
-    // «Набор украшений» появится в M4 вместе со скинами.
-    expect(state.cards.map((card) => card.id)).toEqual(['no_ads', 'coins_1000']);
-    expect(state.cards.map((card) => card.price)).toEqual(['99 YAN', '29 YAN']);
+    expect(state.cards.map((card) => card.id)).toEqual(['no_ads', 'skins_pack', 'coins_1000']);
+    expect(state.cards.map((card) => card.price)).toEqual(['99 YAN', '49 YAN', '29 YAN']);
+    // Украшения: у нового игрока есть только обычная банка и фон мира, они и выбраны.
+    expect(ids(state.decor)).toEqual([
+      'glass',
+      'rainbow',
+      'candy',
+      'stars',
+      'cloud',
+      'world',
+      'confetti',
+      'clouds',
+    ]);
+    expect(ids(state.decor.filter((item) => item.owned))).toEqual(['glass', 'world']);
+    expect(ids(state.decor.filter((item) => item.selected))).toEqual(['glass', 'world']);
     await pollShop(page, (shop) => shop.cards.every((card) => card.currencyIcon));
     await expectButtonsFit(page);
     expect(problems).toEqual([]);
@@ -116,6 +134,53 @@ test.describe('покупки (поддельный SDK)', () => {
       .toBe(true);
     expect(await sdkNames(page, 'adv.banner')).not.toContain('adv.banner:show');
     expect(await e2eState(page, 'ads')).toMatchObject({ interstitialAllowed: false });
+  });
+
+  test('«Набор украшений»: банки и фоны открываются, выбор сохраняется и виден сразу', async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    await openGame(page);
+    await openShop(page);
+    await press(page, 'shop.buy.skins_pack');
+    const bought = await pollShop(
+      page,
+      (shop) => shop.cards.find((card) => card.id === 'skins_pack')!.owned,
+    );
+    expect((await e2eState<SaveState>(page, 'save')).purchases.skinsPack).toBe(true);
+    expect(await sdkNames(page, 'payments.consume')).toEqual([]);
+    // Закрытой осталась только «Радуга» — она за неделю заданий подряд.
+    expect(ids(bought.decor.filter((item) => !item.owned))).toEqual(['rainbow']);
+
+    await scrollToButton(page, 'decor.jar.candy');
+    await press(page, 'decor.jar.candy');
+    await pollShop(page, (shop) => shop.decor.find((item) => item.id === 'candy')!.selected);
+    await scrollToButton(page, 'decor.background.clouds');
+    await expectButtonsFit(page);
+    await press(page, 'decor.background.clouds');
+    const chosen = await pollShop(
+      page,
+      (shop) => shop.decor.find((item) => item.id === 'clouds')!.selected,
+    );
+    expect(ids(chosen.decor.filter((item) => item.selected))).toEqual(['candy', 'clouds']);
+    // Фон меняется сразу, выбор записан в сохранение.
+    await expect.poll(() => e2eState(page, 'background')).toMatchObject({ skin: 'clouds' });
+    expect((await e2eState<SaveState>(page, 'save')).decor).toEqual({
+      jar: 'candy',
+      background: 'clouds',
+    });
+
+    // После перезапуска (даже без локального кэша) фон тот же, а в забеге — банка «Леденец».
+    await page.evaluate(() => localStorage.removeItem('squishy-keys:save'));
+    await page.reload();
+    await waitScene(page, 'Menu');
+    await expect.poll(() => e2eState(page, 'background')).toMatchObject({ skin: 'clouds' });
+    await press(page, 'menu.play');
+    await waitScene(page, 'Game');
+    await expect
+      .poll(async () => (await e2eState<{ jar: string } | null>(page, 'run'))?.jar)
+      .toBe('candy');
+    expect(problems).toEqual([]);
   });
 
   test('при запуске выдаёт оплаченную, но не выданную покупку — один раз', async ({ page }) => {
@@ -179,5 +244,22 @@ test('без Яндекса покупок нет: магазин говорит
   expect(state.status).toBe('Покупки пока недоступны');
   await expectNoPageScroll(page);
   await expectButtonsFit(page);
+  expect(problems).toEqual([]);
+});
+
+test('«Радуга» за неделю заданий выбирается и без покупок', async ({ page }) => {
+  const problems = watchConsole(page);
+  await openGame(page, { lang: 'ru' });
+  const { daily } = await e2eState<SaveState>(page, 'save');
+  await patchSave(page, { daily: { ...daily, bestStreak: 7 } });
+  const state = await openShop(page);
+  expect(ids(state.decor.filter((item) => item.owned))).toEqual(['glass', 'rainbow', 'world']);
+  await scrollToButton(page, 'decor.jar.rainbow');
+  await press(page, 'decor.jar.rainbow');
+  await pollShop(page, (shop) => shop.decor.find((item) => item.id === 'rainbow')!.selected);
+  expect((await e2eState<SaveState>(page, 'save')).decor.jar).toBe('rainbow');
+  // Чужие украшения набора не выбираются: кнопок у них нет.
+  const buttons = (await getButtons(page)).map((button) => button.id);
+  expect(buttons.filter((id) => id.startsWith('decor.'))).not.toContain('decor.jar.candy');
   expect(problems).toEqual([]);
 });

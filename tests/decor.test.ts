@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { activeDecor, ownsDecor, selectDecor, type DecorItem } from '../src/core/meta/decor';
 import { createDefaultSave, type Save } from '../src/core/save/schema';
+import { productById } from '../src/core/shop/purchases';
+import { BACKGROUNDS as BACKGROUNDS_DATA, JAR_SKINS } from '../src/themes/decor';
+import catalog from '../purchases-catalog.json';
 
 const JARS: DecorItem[] = [
   { id: 'glass', kind: 'jar', source: 'default' },
@@ -52,5 +55,59 @@ describe('украшения', () => {
     expect(activeDecor(lost, BACKGROUNDS).id).toBe('world');
     const unknown = save((d) => (d.decor.jar = 'future-jar'));
     expect(activeDecor(unknown, JARS).id).toBe('glass');
+  });
+});
+
+describe('данные украшений (themes/decor.ts)', () => {
+  const kinds = [
+    { kind: 'jar', items: JAR_SKINS, packCount: productById('skins_pack')!.grants.jarSkins },
+    {
+      kind: 'background',
+      items: BACKGROUNDS_DATA,
+      packCount: productById('skins_pack')!.grants.backgrounds,
+    },
+  ] as const;
+
+  it.each(kinds)(
+    '$kind: одно обычное украшение, id без повторов, имена на ru и en',
+    ({ kind, items }) => {
+      expect(items.filter((item) => item.source === 'default')).toHaveLength(1);
+      expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+      for (const item of items) {
+        expect(item.kind).toBe(kind);
+        expect(item.id).toMatch(/^[a-z0-9-]+$/);
+        expect(item.name.ru.trim()).not.toBe('');
+        expect(item.name.en.trim()).not.toBe('');
+        // У обычного своего вида нет — оно в цветах мира.
+        expect(item.look === null).toBe(item.source === 'default');
+      }
+    },
+  );
+
+  it.each(kinds)(
+    '$kind: в наборе ровно столько, сколько обещает покупка',
+    ({ items, packCount }) => {
+      expect(items.filter((item) => item.source === 'pack')).toHaveLength(packCount!);
+    },
+  );
+
+  it('обычные — те же, что в новом сохранении; «Радуга» — за серию', () => {
+    const fresh = createDefaultSave();
+    expect(JAR_SKINS.find((item) => item.source === 'default')!.id).toBe(fresh.decor.jar);
+    expect(BACKGROUNDS_DATA.find((item) => item.source === 'default')!.id).toBe(
+      fresh.decor.background,
+    );
+    expect(JAR_SKINS.filter((item) => item.source === 'streak').map((item) => item.id)).toEqual([
+      'rainbow',
+    ]);
+  });
+
+  it('описание товара в каталоге перечисляет все украшения набора', () => {
+    const description = (catalog as { id: string; description: string }[]).find(
+      (item) => item.id === 'skins_pack',
+    )!.description;
+    for (const item of [...JAR_SKINS, ...BACKGROUNDS_DATA]) {
+      if (item.source === 'pack') expect(description).toContain(item.name.ru);
+    }
   });
 });

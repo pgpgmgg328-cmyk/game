@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { sanitizeSave } from '../core/save/schema';
 import type { GameContext } from './context';
 import { e2eParams } from './e2eParams';
+import type { BackgroundScene } from './scenes/Background';
 import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
 import type { LeaderboardScene } from './scenes/Leaderboard';
@@ -103,7 +104,10 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
       const scene = game.scene.getScene('Worlds') as WorldsScene | null;
       return scene && scene.sys.isActive() ? scene.debugState() : null;
     },
-    /** Магазин: карточки товаров или надпись «недоступно». */
+    /** Фон: какой мир и какой фон из «Украшений» сейчас нарисованы. */
+    background: () =>
+      (game.scene.getScene('Background') as BackgroundScene | null)?.debugState() ?? null,
+    /** Магазин: карточки товаров или надпись «недоступно», плитки украшений. */
     shop: () => {
       const scene = game.scene.getScene('Shop') as ShopScene | null;
       return scene && scene.sys.isActive() ? scene.debugState() : null;

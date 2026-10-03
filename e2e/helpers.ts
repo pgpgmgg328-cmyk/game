@@ -116,6 +116,22 @@ export async function press(page: Page, id: string, touch = false): Promise<void
   else await page.mouse.click(x, y);
 }
 
+/**
+ * Листает список колесом мыши, пока кнопка не станет видна целиком: кнопки под маской
+ * прокрутки не нажимаются и в список кнопок не попадают.
+ */
+export async function scrollToButton(page: Page, id: string): Promise<E2eButton> {
+  const viewport = page.viewportSize()!;
+  await page.mouse.move(viewport.width / 2, viewport.height / 2);
+  for (let i = 0; i < 40; i += 1) {
+    const button = (await getButtons(page)).find((item) => item.id === id);
+    if (button) return button;
+    await page.mouse.wheel(0, 150);
+    await page.waitForTimeout(50);
+  }
+  throw new Error(`Кнопка «${id}» так и не показалась`);
+}
+
 export async function e2eState<T>(page: Page, key: string): Promise<T> {
   return page.evaluate(
     (name) => (window as unknown as { __e2e: Record<string, () => unknown> }).__e2e[name]!(),
@@ -173,6 +189,7 @@ export async function screenshot(page: Page, name: string): Promise<void> {
 export interface E2eRunState {
   keys: { id: number; tier: number; golden: boolean; x: number; y: number; caramel: string }[];
   world: string;
+  jar: string;
   trial: boolean;
   special: 'caramel' | 'meteor' | null;
   meteor: boolean;

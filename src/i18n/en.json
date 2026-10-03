@@ -136,5 +136,14 @@
   "daily.gift.tomorrow": "New gift tomorrow",
   "game.dailyDone": "Key of the Day — done!",
   "game.rainbowJar": "The Rainbow jar is yours!",
-  "result.dailyDone": "Key of the Day"
+  "result.dailyDone": "Key of the Day",
+  "shop.skins_pack.title": "Decor Pack",
+  "shop.skins_pack.text": "3 jars: Candy Cane, Starry and Cloudy. 2 backgrounds: Confetti and Clouds.",
+  "shop.decor": "Decor",
+  "shop.jars": "Jars",
+  "shop.backgrounds": "Backgrounds",
+  "decor.select": "Choose",
+  "decor.selected": "Chosen",
+  "decor.source.pack": "In the Decor Pack",
+  "decor.source.streak": "For a 7-day task streak"
 }

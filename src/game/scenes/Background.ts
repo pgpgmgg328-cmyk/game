@@ -1,23 +1,20 @@
 import Phaser from 'phaser';
 import type { Layout } from '../../core/layout';
+import { activeDecor } from '../../core/meta/decor';
 import { DEFAULT_THEME_ID, getTheme, THEMES, type ThemeData } from '../../themes';
+import { BACKGROUNDS, type BackgroundSkin } from '../../themes/decor';
 import {
+  FLOATING_LAYER,
   FLOATING_TILE,
-  PATTERN_TILE,
-  SPARKLE_TILE,
-  drawBackdropSparkles,
+  backdropLook,
   drawFloatingKeys,
-  drawKeyboardPattern,
-  hasSparkles,
+  paintBackdrop,
 } from '../art/backgroundArt';
 import { LAYOUT_EVENT, getContext } from '../context';
 import { COLORS } from '../ui/theme';
 
-/** Дальний слой — мелкая клавиатура, едва заметная; ближний — редкие парящие клавиши. */
-const KEYBOARD = { scale: 0.5, alpha: 0.22 } as const;
-const FLOATING = { scale: 1, alpha: 0.5, speed: 12, parallax: 56 } as const;
-/** Звёздочки и посыпка мира — между градиентом и клавиатурой. */
-const SPARKLES = { scale: 1, alpha: 0.85 } as const;
+/** Парящие клавиши плывут и чуть сдвигаются за пальцем или мышью. */
+const FLOATING = { speed: 12, parallax: 56 } as const;
 const STATIC_KEY = 'bg-static';
 
 /**
@@ -26,13 +23,15 @@ const STATIC_KEY = 'bg-static';
  * (лёгкий параллакс: дальний слой стоит, ближний движется). Градиент и клавиатура рисуются
  * один раз в одну картинку — на каждый кадр остаётся два полноэкранных слоя, а при «уменьшить
  * движение» — один. Под игровой колонкой — светлая подложка; в альбомной ориентации и на
- * десктопе по бокам виден фон, а не чёрная заливка (CLAUDE.md).
+ * десктопе по бокам виден фон, а не чёрная заливка (CLAUDE.md). Фон из «Украшений» заменяет
+ * цвета и узор мира (например, облака вместо клавиатуры).
  */
 export class BackgroundScene extends Phaser.Scene {
   private backdrop!: Phaser.GameObjects.Image;
   private floating: Phaser.GameObjects.TileSprite | null = null;
   private panel!: Phaser.GameObjects.Graphics;
   private theme: ThemeData = THEMES[0]!;
+  private skin: BackgroundSkin = BACKGROUNDS[0]!;
   private layout: Layout | null = null;
   private drift = 0;
   private parallax = { x: 0, y: 0 };
@@ -46,14 +45,14 @@ export class BackgroundScene extends Phaser.Scene {
     const ctx = getContext(this.game);
     this.reducedMotion = ctx.reducedMotion;
     this.theme = getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
+    this.skin = this.currentSkin();
     this.backdrop = this.add.image(0, 0, '__DEFAULT').setOrigin(0, 0);
     if (!this.reducedMotion) {
+      this.ensureFloating();
       this.floating = this.add
-        .tileSprite(0, 0, 16, 16, this.floatingKey(this.theme))
+        .tileSprite(0, 0, 16, 16, this.floatingKey())
         .setOrigin(0, 0)
-        .setAlpha(FLOATING.alpha);
-      this.ensureFloating(this.theme);
-      this.floating.setTexture(this.floatingKey(this.theme));
+        .setAlpha(FLOATING_LAYER.alpha);
     }
     this.panel = this.add.graphics();
     this.cameras.main.setOrigin(0, 0);
@@ -81,33 +80,51 @@ export class BackgroundScene extends Phaser.Scene {
     tile.tilePositionY = this.drift * FLOATING.speed * 0.35 + this.parallax.y * FLOATING.parallax;
   }
 
-  /** Фон мира: градиент и узоры в его цветах. */
+  /** Фон мира: градиент и узоры в его цветах (или в цветах выбранного фона из «Украшений»). */
   setTheme(theme: ThemeData): void {
-    if (theme === this.theme || !this.backdrop) return;
+    const skin = this.currentSkin();
+    if ((theme === this.theme && skin === this.skin) || !this.backdrop) return;
     this.theme = theme;
+    this.skin = skin;
     if (this.floating) {
-      this.ensureFloating(theme);
-      this.floating.setTexture(this.floatingKey(theme));
+      this.ensureFloating();
+      this.floating.setTexture(this.floatingKey());
     }
     if (this.layout) this.applyLayout(this.layout);
   }
 
-  private floatingKey(theme: ThemeData): string {
-    return `bg-floating:${theme.id}`;
+  /** Игрок выбрал другой фон в «Украшениях». */
+  refreshDecor(): void {
+    this.setTheme(this.theme);
   }
 
-  private ensureFloating(theme: ThemeData): void {
-    const key = this.floatingKey(theme);
+  /** Для автотестов: какой мир и какой фон из «Украшений» сейчас нарисованы. */
+  debugState(): { theme: string; skin: string } {
+    return { theme: this.theme.id, skin: this.skin.id };
+  }
+
+  /** Выбранный фон; до загрузки сохранений — фон мира. */
+  private currentSkin(): BackgroundSkin {
+    const ctx = getContext(this.game);
+    return ctx.saveLoaded ? activeDecor(ctx.save.data, BACKGROUNDS) : BACKGROUNDS[0]!;
+  }
+
+  private floatingKey(): string {
+    return `bg-floating:${this.theme.id}:${this.skin.id}`;
+  }
+
+  private ensureFloating(): void {
+    const key = this.floatingKey();
     if (this.textures.exists(key)) return;
     const texture = this.textures.createCanvas(key, FLOATING_TILE.width, FLOATING_TILE.height);
     if (!texture) return;
-    drawFloatingKeys(texture.getContext(), theme.palette);
+    drawFloatingKeys(texture.getContext(), backdropLook(this.theme, this.skin).palette);
     texture.refresh();
   }
 
   /**
-   * Неподвижная часть фона одной картинкой в CSS-пикселях экрана: градиент, клавиатура и
-   * (если движение выключено) парящие клавиши. Перерисовывается только при смене размера или мира.
+   * Неподвижная часть фона одной картинкой в CSS-пикселях экрана: градиент, узор и (если
+   * движение выключено) парящие клавиши. Перерисовывается только при смене размера, мира или фона.
    */
   private drawBackdrop(layout: Layout): void {
     const width = Math.max(1, Math.ceil(layout.canvasWidth / layout.dpr));
@@ -120,54 +137,17 @@ export class BackgroundScene extends Phaser.Scene {
     } else if (texture.width !== width || texture.height !== height) {
       texture.setSize(width, height);
     }
-    const ctx = texture.getContext();
-    const { palette } = this.theme;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = 1;
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, palette.skyTop);
-    gradient.addColorStop(1, palette.skyBottom);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-    // Узор в логических пикселях колонки: на телефоне и на мониторе клавиши одного размера.
-    const unit = layout.scale / layout.dpr;
-    const { backdrop } = this.theme;
-    if (hasSparkles(backdrop)) {
-      const sparkles = (tile: CanvasRenderingContext2D): void =>
-        drawBackdropSparkles(tile, backdrop);
-      this.fillPattern(ctx, width, height, SPARKLE_TILE, sparkles, SPARKLES, unit);
-    }
-    this.fillPattern(ctx, width, height, PATTERN_TILE, drawKeyboardPattern, KEYBOARD, unit);
-    if (!this.floating) {
-      this.fillPattern(ctx, width, height, FLOATING_TILE, drawFloatingKeys, FLOATING, unit);
-    }
+    const look = backdropLook(this.theme, this.skin);
+    paintBackdrop(
+      texture.getContext(),
+      width,
+      height,
+      look,
+      layout.scale / layout.dpr,
+      !this.floating,
+    );
     texture.refresh();
     this.backdrop.setTexture(STATIC_KEY);
-  }
-
-  private fillPattern(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    tile: { width: number; height: number },
-    draw: (tileCtx: CanvasRenderingContext2D, palette: ThemeData['palette']) => void,
-    look: { scale: number; alpha: number },
-    unit: number,
-  ): void {
-    const source = document.createElement('canvas');
-    source.width = tile.width;
-    source.height = tile.height;
-    const tileCtx = source.getContext('2d');
-    if (!tileCtx) return;
-    draw(tileCtx, this.theme.palette);
-    const pattern = ctx.createPattern(source, 'repeat');
-    if (!pattern) return;
-    ctx.save();
-    ctx.globalAlpha = look.alpha;
-    ctx.scale(look.scale * unit, look.scale * unit);
-    ctx.fillStyle = pattern;
-    ctx.fillRect(0, 0, width / (look.scale * unit), height / (look.scale * unit));
-    ctx.restore();
   }
 
   private applyLayout(layout: Layout): void {
@@ -178,7 +158,7 @@ export class BackgroundScene extends Phaser.Scene {
     if (this.floating) {
       this.floating.setSize(layout.canvasWidth / layout.scale, layout.canvasHeight / layout.scale);
       this.floating.setScale(layout.scale);
-      this.floating.setTileScale(FLOATING.scale);
+      this.floating.setTileScale(FLOATING_LAYER.scale);
     }
 
     this.panel.clear();

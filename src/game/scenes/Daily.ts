@@ -9,7 +9,7 @@ import {
 } from '../../core/meta/daily';
 import { formatNumber } from '../../i18n';
 import { formOf, getTheme } from '../../themes';
-import { RAINBOW, drawJarIcon } from '../art/jarIcon';
+import { drawJarIcon } from '../art/jarIcon';
 import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt } from '../art/textures';
 import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
@@ -263,7 +263,7 @@ export class DailyScene extends BaseScene {
         g.fillCircle(x, cy, 36);
         g.lineStyle(4, done || owned ? 0xffd24a : COLORS.keySide, 1);
         g.strokeCircle(x, cy, 36);
-        drawJarIcon(g, x, cy, 48, { glass: 0xffffff, edge: 0x8e86b8, stripes: RAINBOW });
+        drawJarIcon(g, x, cy, 48, { glass: 0xffffff, edge: 0x8e86b8, pattern: 'rainbow' });
         continue;
       }
       g.fillStyle(done ? COLORS.mintDark : 0xf3f0ff, 1);
