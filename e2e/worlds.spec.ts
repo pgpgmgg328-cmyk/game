@@ -80,7 +80,7 @@ test.describe('миры (диздок, раздел 5)', () => {
     const problems = watchConsole(page);
     await openGame(page, { lang: 'ru' });
     await patchSave(page, { ...VETERAN_SAVE, album: {}, coins: 3500 });
-    await press(page, 'menu.worlds');
+    await press(page, 'menu.world');
     await waitScene(page, 'Worlds');
     await press(page, 'worlds.buy.candy');
     await expect.poll(async () => (await saveState(page)).coins).toBe(500);

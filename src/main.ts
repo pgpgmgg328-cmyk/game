@@ -9,6 +9,7 @@ import { bindLifecycle } from './game/lifecycle';
 import { AlbumScene } from './game/scenes/Album';
 import { BackgroundScene } from './game/scenes/Background';
 import { BootScene } from './game/scenes/Boot';
+import { DailyScene } from './game/scenes/Daily';
 import { GameScene } from './game/scenes/Game';
 import { LeaderboardScene } from './game/scenes/Leaderboard';
 import { MenuScene } from './game/scenes/Menu';
@@ -56,6 +57,7 @@ const game = new Phaser.Game({
     GameScene,
     ResultScene,
     WorldsScene,
+    DailyScene,
     AlbumScene,
     UpgradesScene,
     ShopScene,

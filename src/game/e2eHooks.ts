@@ -6,6 +6,7 @@ import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
 import type { LeaderboardScene } from './scenes/Leaderboard';
 import type { MenuScene } from './scenes/Menu';
+import type { DailyScene } from './scenes/Daily';
 import type { ShopScene } from './scenes/Shop';
 import type { WorldsScene } from './scenes/Worlds';
 
@@ -90,6 +91,13 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     authorized: () => ctx.platform.authorized,
     /** Отправить отложенные сохранения в облако сразу. */
     flushSaves: () => ctx.flushSaves(),
+    /** Сегодняшний день игрока (по серверному времени) — для заданий дня. */
+    today: () => ctx.today(),
+    /** Экран «Задания»: день, какая кнопка подарка видна, серия дней. */
+    daily: () => {
+      const scene = game.scene.getScene('Daily') as DailyScene | null;
+      return scene && scene.sys.isActive() ? scene.debugState() : null;
+    },
     /** Экран «Миры»: какие миры открыты и что написано на кнопке пробного забега. */
     worlds: () => {
       const scene = game.scene.getScene('Worlds') as WorldsScene | null;

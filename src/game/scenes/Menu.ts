@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { grantAchievements, type SecretAchievement } from '../../core/meta/achievements';
 import { albumProgress } from '../../core/meta/album';
+import { canClaimGift } from '../../core/meta/daily';
 import { shouldOfferShortcut } from '../../core/meta/prompts';
 import { isWorldUnlocked, selectedWorldIndex } from '../../core/meta/worlds';
 import { SecretWordTracker } from '../../core/menu/easterEggs';
@@ -20,8 +21,9 @@ import type { BackgroundScene } from './Background';
 import { BaseScene } from './BaseScene';
 import { titleStyle } from './titleStyle';
 
+/** Миры листаются каруселью над «ИГРАТЬ», поэтому в сетке вместо «Миров» — «Задания». */
 const MENU_ITEMS: readonly { key: TranslationKey; scene: string; icon: ButtonIcon }[] = [
-  { key: 'menu.worlds', scene: 'Worlds', icon: 'worlds' },
+  { key: 'menu.daily', scene: 'Daily', icon: 'gift' },
   { key: 'menu.album', scene: 'Album', icon: 'album' },
   { key: 'menu.upgrades', scene: 'Upgrades', icon: 'upgrades' },
   { key: 'menu.shop', scene: 'Shop', icon: 'shop' },
@@ -79,6 +81,8 @@ export class MenuScene extends BaseScene {
   create(): void {
     this.setupScreen();
     const { t, lang, save } = this.ctx;
+    // Новый день — новое задание и подарок (дни — по серверному времени).
+    const today = this.ctx.rollDaily();
     this.secretWord = new SecretWordTracker();
     this.idleMs = 0;
     this.worldIndex = selectedWorldIndex(save.data, WORLD_SIZES);
@@ -156,6 +160,10 @@ export class MenuScene extends BaseScene {
     // Процент коллекции виден прямо на кнопке «Альбом» (диздок, раздел 6).
     const album = albumProgress(this.ctx.save.data.album, WORLD_SIZES);
     this.items.find((item) => item.id === 'menu.album')?.setBadge(`${album.percent}%`);
+    // Подарок дня ждёт — на «Заданиях» значок «!».
+    if (canClaimGift(save.data, today, 'free')) {
+      this.items.find((item) => item.id === 'menu.daily')?.setBadge('!');
+    }
     this.resume = null;
     this.shortcut = null;
     this.offerShortcut();

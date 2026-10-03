@@ -17,6 +17,8 @@
   var ACCOUNT_CLOUD = 'fake-sdk-cloud-account';
   var AUTH_KEY = 'fake-sdk-auth';
   var PURCHASES_KEY = 'fake-sdk-purchases';
+  // Сдвиг серверного времени (мс): автотест «перематывает» дни для заданий и подарков.
+  var TIME_KEY = 'fake-sdk-time-offset';
   var SCORES_KEY = 'fake-sdk-scores';
   var AD_OPEN_MS = 150;
   var AD_SHOW_MS = 450;
@@ -333,6 +335,9 @@
         return Promise.resolve({ outcome: 'accepted' });
       },
     },
+    serverTime: function () {
+      return Date.now() + Number(localStorage.getItem(TIME_KEY) || 0);
+    },
     getFlags: function (options) {
       record('getFlags');
       var flags = {};
@@ -383,6 +388,11 @@
 
   window.__fakeSdk = {
     calls: calls,
+    /** Перемотать серверное время на days дней вперёд (переживает перезагрузку страницы). */
+    shiftDays: function (days) {
+      var offset = Number(localStorage.getItem(TIME_KEY) || 0) + days * 86400000;
+      localStorage.setItem(TIME_KEY, String(offset));
+    },
     banner: banner,
     emit: emit,
   };

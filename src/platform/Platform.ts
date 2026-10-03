@@ -162,4 +162,10 @@ export interface Platform extends SaveBackend {
 
   /** Предложить ярлык на рабочий стол. true — игрок согласился. */
   addShortcut(): Promise<boolean>;
+
+  /**
+   * Время в мс, которое не подкрутить часами устройства (ysdk.serverTime()): по нему считаются
+   * дни для «Клавиши дня» и подарка. Без площадки — время устройства.
+   */
+  serverTime(): number;
 }

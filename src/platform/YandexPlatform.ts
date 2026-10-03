@@ -416,6 +416,19 @@ export class YandexPlatform implements Platform {
 
   // ── Прочее ──────────────────────────────────────────────────────────────────────────────
 
+  serverTime(): number {
+    const sdk = this.sdk;
+    if (sdk) {
+      try {
+        const time = sdk.serverTime();
+        if (Number.isFinite(time) && time > 0) return time;
+      } catch {
+        // Нет серверного времени: дальше — время устройства.
+      }
+    }
+    return this.clock.now();
+  }
+
   async getFlags(defaults: Readonly<Record<string, string>>): Promise<Record<string, string>> {
     const result: Record<string, string> = { ...defaults };
     const sdk = this.sdk;

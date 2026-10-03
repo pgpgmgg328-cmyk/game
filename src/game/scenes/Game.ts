@@ -83,6 +83,8 @@ export interface RunSummary {
   trial: boolean;
   /** Мир, который открыл Пробел этого забега; null — не открылся. */
   unlockedWorld: string | null;
+  /** В этом забеге выполнена «Клавиша дня». */
+  dailyDone: boolean;
 }
 
 /** Самая высокая клавиша, которая может висеть над банкой (тир 5), в единицах физики. */
@@ -146,6 +148,7 @@ export class GameScene extends BaseScene {
   private newForms: FoundForm[] = [];
   private achievements: string[] = [];
   private unlockedWorld: string | null = null;
+  private dailyDone = false;
   private shownScore = 0;
   private shownCoins = 0;
   private best = 0;
@@ -352,6 +355,7 @@ export class GameScene extends BaseScene {
     this.newForms = [];
     this.achievements = [];
     this.unlockedWorld = null;
+    this.dailyDone = false;
     this.shakeOffset = 0;
     this.removeMode = false;
     this.offering = false;
@@ -698,6 +702,7 @@ export class GameScene extends BaseScene {
       const color = hexToNumber(this.artFor(tier, created.golden).colors.base);
       this.fx.merge(event.x, event.y, color, tier, t('game.clack'), event.score);
       const reveal = this.discover(created, 'merge');
+      this.checkDailyTask(tier);
       // Легендарный показ играет свои фанфары: звук формы поверх него не нужен.
       if (reveal !== 'legendary') this.ctx.audio.form(formOf(this.theme, tier).sound, event.combo);
       if (tier === maxTier(this.theme)) {
@@ -1127,6 +1132,29 @@ export class GameScene extends BaseScene {
     );
   }
 
+  /**
+   * «Клавиша дня» (диздок, раздел 6): выросла нужная форма в нужном мире — награда монетами
+   * и серия дней; седьмой день подряд — банка «Радуга» и «Неделя подряд».
+   */
+  private checkDailyTask(tier: number): void {
+    const { ctx } = this;
+    if (this.run.trial) return;
+    const done = ctx.completeDailyTask(this.theme.id, tier);
+    if (!done) return;
+    this.dailyDone = true;
+    this.toasts.show({
+      icon: { kind: 'coin' },
+      title: ctx.t('game.dailyDone'),
+      detail: ctx.t('daily.streak.title', { count: Math.min(7, done.streak) }),
+      coins: done.coins,
+    });
+    ctx.audio.achievement();
+    if (done.rainbow) {
+      this.toasts.show({ icon: { kind: 'medal' }, title: ctx.t('game.rainbowJar'), detail: '' });
+    }
+    this.checkAchievements();
+  }
+
   /** Новый мир открыт Пробелом: плашка поверх игры, на экране результата — строка. */
   private announceWorld(id: string): void {
     const theme = getTheme(id);
@@ -1243,6 +1271,7 @@ export class GameScene extends BaseScene {
       achievements: [...this.achievements],
       trial: this.run.trial,
       unlockedWorld: this.unlockedWorld,
+      dailyDone: this.dailyDone,
     };
 
     this.banner = this.createBanner(ctx.t('game.overflow'));

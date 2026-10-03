@@ -41,7 +41,8 @@ test.describe('без SDK (LocalPlatform)', () => {
     const problems = watchConsole(page);
     await openGame(page, { lang: 'ru' });
     const screens: [string, string][] = [
-      ['menu.worlds', 'Worlds'],
+      ['menu.world', 'Worlds'],
+      ['menu.daily', 'Daily'],
       ['menu.album', 'Album'],
       ['menu.upgrades', 'Upgrades'],
       ['menu.shop', 'Shop'],

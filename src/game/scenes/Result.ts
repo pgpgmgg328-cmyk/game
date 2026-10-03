@@ -59,6 +59,7 @@ const EMPTY_SUMMARY: RunSummary = {
   achievements: [],
   trial: false,
   unlockedWorld: null,
+  dailyDone: false,
 };
 
 /**
@@ -162,6 +163,7 @@ export class ResultScene extends BaseScene {
     const opened = this.summary.unlockedWorld ? getTheme(this.summary.unlockedWorld) : null;
     const awards = [
       ...(opened ? [t('result.newWorld', { world: opened.name[lang] })] : []),
+      ...(this.summary.dailyDone ? [t('result.dailyDone')] : []),
       ...defs.map((def) => achievementTitle(def, t, lang)),
     ];
     this.awards = this.createText(0, 0, awards.join(', '), {

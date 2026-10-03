@@ -120,6 +120,7 @@ function createFakeSdk(
       goldenChance: '0.05',
     })),
     isAvailableMethod: vi.fn(async (_name: string) => true),
+    serverTime: vi.fn((): number => 1_790_000_000_000),
     getPayments: vi.fn(async () => payments),
     on: (event: string, listener: Listener) => {
       (listeners[event] ??= new Set()).add(listener);
@@ -507,6 +508,19 @@ describe('YandexPlatform: игрок и рекорды', () => {
     const other = await setup();
     other.fake.sdk.leaderboards.getEntries.mockRejectedValueOnce(new Error('404'));
     expect(await other.platform.getLeaderboard()).toBeNull();
+  });
+});
+
+describe('YandexPlatform: серверное время', () => {
+  it('время — из ysdk.serverTime(), при сбое — время устройства', async () => {
+    const { platform, fake, clock } = await setup();
+    expect(platform.serverTime()).toBe(1_790_000_000_000);
+    fake.sdk.serverTime.mockImplementationOnce(() => {
+      throw new Error('нет');
+    });
+    expect(platform.serverTime()).toBe(clock.now());
+    fake.sdk.serverTime.mockReturnValueOnce(Number.NaN);
+    expect(platform.serverTime()).toBe(clock.now());
   });
 });
 

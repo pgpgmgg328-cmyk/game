@@ -158,6 +158,10 @@ export class LocalPlatform implements Platform {
     return () => {};
   }
 
+  serverTime(): number {
+    return this.clock.now();
+  }
+
   async submitScore(_score: number): Promise<boolean> {
     return false;
   }

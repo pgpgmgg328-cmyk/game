@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { AudioEngine } from '../audio/AudioEngine';
 import { defaultFlags, type GameFlags } from '../core/flags';
+import { completeTask, dayNumber, rollDay, type TaskCompletion } from '../core/meta/daily';
 import { applyRunOutcome, type RunOutcome, type RunOutcomeInput } from '../core/meta/progress';
 import type { Layout } from '../core/layout';
 import type { RunSnapshot } from '../core/run/snapshot';
@@ -10,7 +11,7 @@ import { SaveManager } from '../core/save/SaveManager';
 import type { Save } from '../core/save/schema';
 import { createTranslator, type Lang, type Translate } from '../i18n';
 import type { Platform } from '../platform';
-import { THEMES } from '../themes';
+import { THEMES, WORLD_SIZES } from '../themes';
 import { AdService } from './AdService';
 import { PurchaseService } from './PurchaseService';
 import type { Viewport } from './viewport';
@@ -95,6 +96,41 @@ export class GameContext {
     }, 'urgent');
     if (outcome.newRecord) void this.platform.submitScore(this.save.data.stats.bestScore);
     return outcome;
+  }
+
+  /** Номер сегодняшнего дня игрока: серверное время и часовой пояс устройства (core/meta/daily.ts). */
+  today(): number {
+    return dayNumber(this.platform.serverTime(), new Date().getTimezoneOffset());
+  }
+
+  /** Наступил новый день — новое задание и подарки (сохраняется сразу). Возвращает сегодняшний день. */
+  rollDaily(): number {
+    const day = this.today();
+    if (!this.saveLoaded) return day;
+    const saved = this.save.data.daily.day;
+    if (day > saved || saved > day + 2) {
+      this.save.update((draft) => {
+        rollDay(draft, WORLD_SIZES, day);
+      });
+    }
+    return day;
+  }
+
+  /**
+   * Слияние вырастило форму tier в мире world: если это «Клавиша дня» — награда и серия дней
+   * (сохраняется сразу). null — задание не про это.
+   */
+  completeDailyTask(world: string, tier: number): TaskCompletion | null {
+    const day = this.rollDaily();
+    const { daily } = this.save.data;
+    if (daily.taskDone || !daily.task || daily.task.world !== world || tier < daily.task.tier) {
+      return null;
+    }
+    let done: TaskCompletion | null = null;
+    this.save.update((draft) => {
+      done = completeTask(draft, day, world, tier);
+    }, 'urgent');
+    return done;
   }
 
   /** Немедленно отправить отложенные сохранения (пауза, скрытие вкладки). */
