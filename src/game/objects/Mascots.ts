@@ -100,6 +100,12 @@ export class Mascots {
     }
   }
 
+  /** Убрать персонажей (сменился мир в карусели меню). */
+  destroy(): void {
+    this.layer.destroy();
+    this.mascots = [];
+  }
+
   /** Пасхалка: персонажи засыпают — глаза закрыты, над головой «z». */
   sleep(): void {
     if (this.sleeping) return;

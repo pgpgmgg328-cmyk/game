@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { grantAchievements, type SecretAchievement } from '../../core/meta/achievements';
 import { albumProgress } from '../../core/meta/album';
 import { shouldOfferShortcut } from '../../core/meta/prompts';
+import { isWorldUnlocked, selectedWorldIndex } from '../../core/meta/worlds';
 import { SecretWordTracker } from '../../core/menu/easterEggs';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
-import { DEFAULT_THEME_ID, THEMES, WORLD_SIZES, getTheme, type ThemeData } from '../../themes';
+import { THEMES, WORLD_SIZES, type ThemeData } from '../../themes';
 import { achievementTitle } from '../achievementText';
 import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt, type KeyArt } from '../art/textures';
 import { keycapRain } from '../objects/KeycapRain';
@@ -33,6 +34,9 @@ const SIDE_MASCOTS_ROOM = 200;
 
 /** На низком экране (телефон в альбомной ориентации) кнопки встают в три колонки вместо двух. */
 const COMPACT_HEIGHT = 1000;
+/** Карусель миров: стрелки по бокам и кнопка с именем мира посередине. */
+const CAROUSEL_HEIGHT = 110;
+const ARROW_WIDTH = 110;
 
 /** Окно «Продолжить забег?» после перезагрузки страницы посреди забега. */
 interface ResumeDialog {
@@ -48,6 +52,11 @@ interface ResumeDialog {
 export class MenuScene extends BaseScene {
   private logo!: MenuLogo;
   private play!: Button;
+  /** Карусель миров (диздок, раздел 9): ◀ мир ▶. Имя мира — кнопка на экран «Миры». */
+  private worldPrev!: Button;
+  private worldName!: Button;
+  private worldNext!: Button;
+  private worldIndex = 0;
   private items: Button[] = [];
   private coinPanel!: Phaser.GameObjects.Graphics;
   private coinIcon!: Phaser.GameObjects.Image;
@@ -72,8 +81,9 @@ export class MenuScene extends BaseScene {
     const { t, lang, save } = this.ctx;
     this.secretWord = new SecretWordTracker();
     this.idleMs = 0;
-    this.theme = getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
-    (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
+    this.worldIndex = selectedWorldIndex(save.data, WORLD_SIZES);
+    this.theme = THEMES[this.worldIndex]!;
+    this.applyWorldLook();
     ensureFxArt(this);
     ensureUiArt(this);
     this.arts = ensureThemeArt(this, this.theme, lang);
@@ -100,6 +110,30 @@ export class MenuScene extends BaseScene {
       fontSize: 76,
       onClick: () => this.startGame(),
     });
+    this.worldPrev = new Button(this, 0, 0, {
+      id: 'menu.prevWorld',
+      icon: 'left',
+      width: ARROW_WIDTH,
+      height: CAROUSEL_HEIGHT,
+      onClick: () => this.switchWorld(-1),
+    });
+    this.worldName = new Button(this, 0, 0, {
+      id: 'menu.world',
+      label: '',
+      icon: 'worlds',
+      width: 420,
+      height: CAROUSEL_HEIGHT,
+      fontSize: 40,
+      onClick: () => this.openWorlds(),
+    });
+    this.worldNext = new Button(this, 0, 0, {
+      id: 'menu.nextWorld',
+      icon: 'right',
+      width: ARROW_WIDTH,
+      height: CAROUSEL_HEIGHT,
+      onClick: () => this.switchWorld(1),
+    });
+    this.updateWorldButtons();
     this.items = MENU_ITEMS.map(
       (item) =>
         new Button(this, 0, 0, {
@@ -193,10 +227,15 @@ export class MenuScene extends BaseScene {
     const gridHeight = rows * itemHeight + (rows - 1) * gap;
 
     // Свободное место делим между отступами, чтобы на высоком экране меню не липло к верху.
-    const free = Math.max(0, height - titleBottom - playHeight - gridHeight - 40);
-    const playY = titleBottom + Math.max(gap, free * 0.3) + playHeight / 2;
+    const free = Math.max(
+      0,
+      height - titleBottom - CAROUSEL_HEIGHT - playHeight - gridHeight - 40 - gap,
+    );
+    const carouselY = titleBottom + Math.max(gap, free * 0.25) + CAROUSEL_HEIGHT / 2;
+    const playY = carouselY + CAROUSEL_HEIGHT / 2 + Math.max(gap, free * 0.1) + playHeight / 2;
     const gridTop = playY + playHeight / 2 + Math.max(gap * 1.5, free * 0.2);
     this.play.setPosition(360, playY);
+    this.placeCarousel(carouselY, compact);
 
     const rowWidth = columns * itemWidth + (columns - 1) * gap;
     this.items.forEach((item, index) => {
@@ -282,6 +321,65 @@ export class MenuScene extends BaseScene {
     return this.openedArts().slice(0, 4);
   }
 
+  // ── Карусель миров ───────────────────────────────────────────────────────────────────
+
+  private placeCarousel(y: number, compact: boolean): void {
+    const nameWidth = compact ? 400 : 420;
+    const gap = 16;
+    this.worldName.setButtonSize(nameWidth, CAROUSEL_HEIGHT).setPosition(360, y);
+    const offset = nameWidth / 2 + gap + ARROW_WIDTH / 2;
+    this.worldPrev.setPosition(360 - offset, y);
+    this.worldNext.setPosition(360 + offset, y);
+  }
+
+  private get worldUnlocked(): boolean {
+    return isWorldUnlocked(this.ctx.save.data, WORLD_SIZES, this.worldIndex);
+  }
+
+  /** Фон и музыка выбранного мира. */
+  private applyWorldLook(): void {
+    (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
+    this.ctx.audio.setMusic(this.theme.music);
+  }
+
+  /** Имя мира на кнопке карусели и «ИГРАТЬ» или «ОТКРЫТЬ» для закрытого мира. */
+  private updateWorldButtons(): void {
+    const { t, lang } = this.ctx;
+    const unlocked = this.worldUnlocked;
+    this.worldName.setText(this.theme.name[lang]).setIcon(unlocked ? 'worlds' : 'lock');
+    this.play
+      .setText(t(unlocked ? 'menu.play' : 'menu.unlock'))
+      .setIcon(unlocked ? 'play' : 'lock');
+  }
+
+  /** Листать миры стрелками: сразу меняются фон, музыка и персонажи меню. */
+  private switchWorld(step: number): void {
+    if (this.resume) return;
+    const count = THEMES.length;
+    this.worldIndex = (this.worldIndex + step + count) % count;
+    this.theme = THEMES[this.worldIndex]!;
+    const id = this.theme.id;
+    this.ctx.save.update((draft) => {
+      draft.worlds.selected = id;
+    });
+    this.applyWorldLook();
+    this.arts = ensureThemeArt(this, this.theme, this.ctx.lang);
+    this.mascots.destroy();
+    this.mascots = new Mascots(this, this.mascotArts(), this.ctx.reducedMotion, (tier) =>
+      this.ctx.audio.squish(tier),
+    );
+    this.updateWorldButtons();
+    this.layoutScreen(this.screenHeight);
+    if (!this.ctx.reducedMotion) {
+      this.worldName.setScale(0.9);
+      this.tweens.add({ targets: this.worldName, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    }
+  }
+
+  private openWorlds(): void {
+    this.scene.start('Worlds', { focus: this.theme.id });
+  }
+
   // ── Ярлык на рабочий стол ────────────────────────────────────────────────────────────
 
   /** Кнопка-предложение после пятого забега (диздок, раздел 9) — только если площадка разрешает. */
@@ -353,6 +451,9 @@ export class MenuScene extends BaseScene {
       if (!this.sys.isActive()) return;
       wake();
       if (this.resume || event.repeat) return;
+      // Стрелки листают миры. A и D здесь не листают: они нужны для тайного слова.
+      if (event.code === 'ArrowLeft') this.switchWorld(-1);
+      if (event.code === 'ArrowRight') this.switchWorld(1);
       // Пасхалка: «КЛАЦ» или «CLACK» на клавиатуре (по event.code, раскладка не важна).
       if (this.secretWord.press(event.code)) this.secret('secret_word');
     };
@@ -398,12 +499,21 @@ export class MenuScene extends BaseScene {
 
   // ── Для автотестов ───────────────────────────────────────────────────────────────────
 
-  debugState(): { coins: string; mascots: number; asleep: boolean; logoFirstRow: number } {
+  debugState(): {
+    coins: string;
+    mascots: number;
+    asleep: boolean;
+    logoFirstRow: number;
+    world: string;
+    locked: boolean;
+  } {
     return {
       coins: this.coinText.text,
       mascots: this.mascots.count,
       asleep: this.mascots.asleep,
       logoFirstRow: this.logo.firstRowLength,
+      world: this.theme.id,
+      locked: !this.worldUnlocked,
     };
   }
 
@@ -416,8 +526,13 @@ export class MenuScene extends BaseScene {
     this.idleMs += ms;
   }
 
+  /** «ИГРАТЬ» — забег в выбранном мире; закрытый мир — экран «Миры», где его можно открыть. */
   private startGame(): void {
-    this.scene.start('Game');
+    if (!this.worldUnlocked) {
+      this.openWorlds();
+      return;
+    }
+    this.scene.start('Game', { world: this.theme.id });
   }
 
   /** «Продолжить забег?» — после перезагрузки страницы посреди забега (CLAUDE.md, «Сохранения»). */
@@ -487,7 +602,9 @@ export class MenuScene extends BaseScene {
   }
 
   private setMenuEnabled(enabled: boolean): void {
-    for (const button of [this.play, ...this.items, ...(this.shortcut ? [this.shortcut] : [])]) {
+    const carousel = [this.worldPrev, this.worldName, this.worldNext];
+    const shortcut = this.shortcut ? [this.shortcut] : [];
+    for (const button of [this.play, ...carousel, ...this.items, ...shortcut]) {
       if (enabled) button.setInteractive();
       else button.disableInteractive();
     }

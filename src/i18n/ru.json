@@ -112,5 +112,13 @@
   "menu.shortcutDone.title": "Готово!",
   "menu.shortcutDone.text": "Игра теперь на рабочем столе",
   "ach.week_streak": "Неделя подряд",
-  "ach.week_streak.hint": "«Клавиша дня» 7 дней подряд"
+  "ach.week_streak.hint": "«Клавиша дня» 7 дней подряд",
+  "menu.unlock": "ОТКРЫТЬ",
+  "worlds.forms": "Формы: {found} из {total}",
+  "worlds.play": "Играть",
+  "worlds.locked": "Открой его Пробелом в мире «{world}»",
+  "worlds.try": "Реклама: 1 забег",
+  "worlds.unlocked": "Новый мир открыт!",
+  "result.trialAgain": "Реклама: ещё забег",
+  "result.newWorld": "Открыт мир «{world}»!"
 }

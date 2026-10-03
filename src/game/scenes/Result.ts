@@ -57,6 +57,8 @@ const EMPTY_SUMMARY: RunSummary = {
   bonus: 0,
   newForms: [],
   achievements: [],
+  trial: false,
+  unlockedWorld: null,
 };
 
 /**
@@ -156,12 +158,17 @@ export class ResultScene extends BaseScene {
       this.summary.achievements.includes(def.id),
     );
     this.medal = this.add.image(0, 0, UI_ART.medal).setDisplaySize(52, 52);
-    this.awards = this.createText(
-      0,
-      0,
-      defs.map((def) => achievementTitle(def, t, lang)).join(', '),
-      { fontSize: '30px', fontStyle: '900', color: '#b8801f' },
-    ).setOrigin(0, 0.5);
+    // Новый мир — первым: это главная новость забега.
+    const opened = this.summary.unlockedWorld ? getTheme(this.summary.unlockedWorld) : null;
+    const awards = [
+      ...(opened ? [t('result.newWorld', { world: opened.name[lang] })] : []),
+      ...defs.map((def) => achievementTitle(def, t, lang)),
+    ];
+    this.awards = this.createText(0, 0, awards.join(', '), {
+      fontSize: '30px',
+      fontStyle: '900',
+      color: '#b8801f',
+    }).setOrigin(0, 0.5);
     this.keyLabel = this.createText(360, 0, t('result.bestKey'), {
       fontSize: '30px',
       fontStyle: '800',
@@ -179,12 +186,16 @@ export class ResultScene extends BaseScene {
     this.fx = new Particles(this, this.ctx.reducedMotion);
     this.add.existing(this.fx.layer);
 
+    // Пробный забег в закрытом мире повторяется только за рекламу (диздок, раздел 5).
+    const trial = this.summary.trial;
     this.again = new Button(this, 360, 0, {
-      id: 'result.again',
-      label: t('result.again'),
+      id: trial ? 'result.trialAgain' : 'result.again',
+      label: t(trial ? 'result.trialAgain' : 'result.again'),
+      icon: trial ? 'play' : undefined,
       width: 480,
       variant: 'primary',
-      onClick: () => void this.leave('Game'),
+      fontSize: trial ? 38 : 44,
+      onClick: () => void (trial ? this.trialAgain() : this.leave('Game')),
     });
     this.menu = new Button(this, 360, 0, {
       id: 'result.menu',
@@ -214,7 +225,8 @@ export class ResultScene extends BaseScene {
       .setOrigin(0.5)
       .setVisible(false);
     this.onKeyAction((action) => {
-      if (action === 'drop') void this.leave('Game');
+      // Реклама — только осознанным нажатием кнопки, не клавишей.
+      if (action === 'drop' && !trial) void this.leave('Game');
     });
 
     this.recordText.setText(t('game.best', { score: formatNumber(this.summary.best, lang) }));
@@ -377,7 +389,30 @@ export class ResultScene extends BaseScene {
     this.leaving = true;
     for (const button of this.getButtons()) button.setDisabled(true);
     await this.ctx.ads.interstitial();
-    if (this.sys.isActive()) this.scene.start(target);
+    if (!this.sys.isActive()) return;
+    // «Ещё раз» — в том же мире, что и этот забег.
+    if (target === 'Game') this.scene.start('Game', { world: this.summary.world });
+    else this.scene.start('Menu');
+  }
+
+  /** «▶ Реклама: ещё забег» после пробного забега: новый пробный забег — только за награду. */
+  private async trialAgain(): Promise<void> {
+    if (this.leaving || this.watching) return;
+    this.watching = true;
+    for (const button of this.getButtons()) button.setDisabled(true);
+    let granted = false;
+    const result = await this.ctx.ads.rewarded(() => {
+      granted = true;
+    });
+    if (!this.sys.isActive()) return;
+    this.watching = false;
+    if (granted) {
+      this.leaving = true;
+      this.scene.start('Game', { world: this.summary.world, trial: true });
+      return;
+    }
+    for (const button of this.getButtons()) button.setDisabled(false);
+    if (result === 'error') this.again.setIcon(null).setText(this.ctx.t('ads.unavailable'));
   }
 
   /**

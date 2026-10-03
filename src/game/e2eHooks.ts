@@ -7,6 +7,7 @@ import type { GameScene } from './scenes/Game';
 import type { LeaderboardScene } from './scenes/Leaderboard';
 import type { MenuScene } from './scenes/Menu';
 import type { ShopScene } from './scenes/Shop';
+import type { WorldsScene } from './scenes/Worlds';
 
 export interface E2eButton {
   id: string;
@@ -89,6 +90,11 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     authorized: () => ctx.platform.authorized,
     /** Отправить отложенные сохранения в облако сразу. */
     flushSaves: () => ctx.flushSaves(),
+    /** Экран «Миры»: какие миры открыты и что написано на кнопке пробного забега. */
+    worlds: () => {
+      const scene = game.scene.getScene('Worlds') as WorldsScene | null;
+      return scene && scene.sys.isActive() ? scene.debugState() : null;
+    },
     /** Магазин: карточки товаров или надпись «недоступно». */
     shop: () => {
       const scene = game.scene.getScene('Shop') as ShopScene | null;

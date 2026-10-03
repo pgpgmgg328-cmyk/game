@@ -171,7 +171,11 @@ export async function screenshot(page: Page, name: string): Promise<void> {
 }
 
 export interface E2eRunState {
-  keys: { id: number; tier: number; golden: boolean; x: number; y: number }[];
+  keys: { id: number; tier: number; golden: boolean; x: number; y: number; caramel: string }[];
+  world: string;
+  trial: boolean;
+  special: 'caramel' | 'meteor' | null;
+  meteor: boolean;
   score: number;
   over: boolean;
   ending: boolean;

@@ -73,7 +73,8 @@ export function installBot(game: Phaser.Game, mode: 'normal' | 'fast'): void {
         break;
       case 'Result':
         if (Math.random() >= pace.watchShare || !press(scene, 'result.double')) {
-          press(scene, 'result.again');
+          // После пробного забега «Ещё раз» — за рекламу; бот тогда выходит в меню.
+          if (!press(scene, 'result.again')) press(scene, 'result.menu');
         }
         break;
       case 'Pause':

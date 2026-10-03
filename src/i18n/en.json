@@ -112,5 +112,13 @@
   "menu.shortcutDone.title": "Done!",
   "menu.shortcutDone.text": "The game is now on your desktop",
   "ach.week_streak": "Week in a Row",
-  "ach.week_streak.hint": "Key of the Day 7 days in a row"
+  "ach.week_streak.hint": "Key of the Day 7 days in a row",
+  "menu.unlock": "UNLOCK",
+  "worlds.forms": "Forms: {found} of {total}",
+  "worlds.play": "Play",
+  "worlds.locked": "Grow the Spacebar in {world} to unlock",
+  "worlds.try": "Ad: 1 run",
+  "worlds.unlocked": "New world unlocked!",
+  "result.trialAgain": "Ad: one more run",
+  "result.newWorld": "{world} unlocked!"
 }

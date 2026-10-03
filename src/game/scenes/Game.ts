@@ -8,6 +8,7 @@ import {
   type AchievementDef,
 } from '../../core/meta/achievements';
 import { discoverForm, isDiscovered } from '../../core/meta/album';
+import { worldUnlockedBy } from '../../core/meta/worlds';
 import { runModifiers } from '../../core/meta/upgrades';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import {
@@ -78,6 +79,10 @@ export interface RunSummary {
   newForms: FoundForm[];
   /** Достижения, полученные в этом забеге. */
   achievements: string[];
+  /** Пробный забег в закрытом мире за рекламу. */
+  trial: boolean;
+  /** Мир, который открыл Пробел этого забега; null — не открылся. */
+  unlockedWorld: string | null;
 }
 
 /** Самая высокая клавиша, которая может висеть над банкой (тир 5), в единицах физики. */
@@ -140,6 +145,7 @@ export class GameScene extends BaseScene {
   private revealQueue: KeyArt[] = [];
   private newForms: FoundForm[] = [];
   private achievements: string[] = [];
+  private unlockedWorld: string | null = null;
   private shownScore = 0;
   private shownCoins = 0;
   private best = 0;
@@ -173,6 +179,7 @@ export class GameScene extends BaseScene {
     const world = data.snapshot?.world ?? data.world ?? save.worlds.selected;
     this.theme = getTheme(world) ?? getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
     (this.scene.get('Background') as BackgroundScene | null)?.setTheme(this.theme);
+    ctx.audio.setMusic(this.theme.music);
     this.art = ensureThemeArt(this, this.theme, ctx.lang);
     ensureFxArt(this);
     ensureUiArt(this);
@@ -344,6 +351,7 @@ export class GameScene extends BaseScene {
     this.revealQueue = [];
     this.newForms = [];
     this.achievements = [];
+    this.unlockedWorld = null;
     this.shakeOffset = 0;
     this.removeMode = false;
     this.offering = false;
@@ -1061,6 +1069,8 @@ export class GameScene extends BaseScene {
     const { ctx } = this;
     const world = this.theme.id;
     if (isDiscovered(ctx.save.data.album, world, key.tier, key.golden)) return null;
+    // Пробел мира открывает следующий мир (диздок, раздел 5): проверяем до записи в альбом.
+    const opens = worldUnlockedBy(ctx.save.data, WORLD_SIZES, world, key.tier);
     let found = { form: false, golden: false };
     ctx.save.update((draft) => {
       found = discoverForm(draft, world, key.tier, key.golden);
@@ -1076,6 +1086,7 @@ export class GameScene extends BaseScene {
         detail: name,
       });
     }
+    if (opens && found.form) this.announceWorld(opens.id);
     this.checkAchievements();
     if (!found.form) return null;
     if (source === 'drop') {
@@ -1114,6 +1125,20 @@ export class GameScene extends BaseScene {
       },
       () => this.nextReveal(),
     );
+  }
+
+  /** Новый мир открыт Пробелом: плашка поверх игры, на экране результата — строка. */
+  private announceWorld(id: string): void {
+    const theme = getTheme(id);
+    if (!theme) return;
+    const { ctx } = this;
+    this.unlockedWorld = id;
+    this.toasts.show({
+      icon: { kind: 'medal' },
+      title: ctx.t('worlds.unlocked'),
+      detail: theme.name[ctx.lang],
+    });
+    ctx.audio.achievement();
   }
 
   private addSticker(key: RunKey): void {
@@ -1216,6 +1241,8 @@ export class GameScene extends BaseScene {
       bonus: outcome.bonus,
       newForms: [...this.newForms],
       achievements: [...this.achievements],
+      trial: this.run.trial,
+      unlockedWorld: this.unlockedWorld,
     };
 
     this.banner = this.createBanner(ctx.t('game.overflow'));

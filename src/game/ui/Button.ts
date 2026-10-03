@@ -23,7 +23,11 @@ export type ButtonIcon =
   | 'shop'
   | 'leaderboard'
   | 'settings'
-  | 'shortcut';
+  | 'shortcut'
+  | 'left'
+  | 'right'
+  | 'lock'
+  | 'gift';
 
 export interface ButtonOptions {
   /** Постоянный идентификатор кнопки (для автотестов). */
@@ -580,6 +584,45 @@ export function drawIcon(
       g.fillRoundedRect(x - r * 0.4, y - r * 0.4, r * 0.8, r * 0.8, r * 0.18);
       g.fillStyle(0xfff4b8, 1);
       g.fillRoundedRect(x - r * 0.3, y - r * 0.36, r * 0.6, r * 0.46, r * 0.12);
+      return;
+    }
+    case 'left':
+    case 'right': {
+      // Стрелка-треугольник карусели миров.
+      const r = s * 0.36;
+      const dir = icon === 'left' ? -1 : 1;
+      g.fillPoints(
+        [
+          new Phaser.Math.Vector2(x + dir * r, y),
+          new Phaser.Math.Vector2(x - dir * r * 0.6, y - r),
+          new Phaser.Math.Vector2(x - dir * r * 0.6, y + r),
+        ],
+        true,
+      );
+      return;
+    }
+    case 'lock': {
+      // Замочек: дужка и корпус с замочной скважиной.
+      const w = s * 0.56;
+      const h = s * 0.42;
+      g.lineStyle(Math.max(4, s * 0.1), color, 1);
+      g.beginPath();
+      g.arc(x, y - h * 0.15, w * 0.32, Math.PI, 0);
+      g.strokePath();
+      g.lineBetween(x - w * 0.32, y - h * 0.15, x - w * 0.32, y + h * 0.05);
+      g.lineBetween(x + w * 0.32, y - h * 0.15, x + w * 0.32, y + h * 0.05);
+      g.fillRoundedRect(x - w / 2, y, w, h, s * 0.06);
+      return;
+    }
+    case 'gift': {
+      // Подарок: коробка, крышка и бантик.
+      const w = s * 0.62;
+      const h = s * 0.42;
+      g.fillRoundedRect(x - w / 2, y - h * 0.15, w, h, s * 0.05);
+      g.fillRoundedRect(x - w * 0.58, y - h * 0.5, w * 1.16, h * 0.3, s * 0.04);
+      g.lineStyle(Math.max(3, s * 0.08), color, 1);
+      g.strokeEllipse(x - s * 0.1, y - h * 0.68, s * 0.2, s * 0.14);
+      g.strokeEllipse(x + s * 0.1, y - h * 0.68, s * 0.2, s * 0.14);
       return;
     }
   }
