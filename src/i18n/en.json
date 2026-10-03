@@ -147,5 +147,10 @@
   "decor.source.pack": "In the Decor Pack",
   "decor.source.streak": "For a 7-day task streak",
   "album.tab.medals": "Medals",
-  "album.earned": "Earned {found} of {total}"
+  "album.earned": "Earned {found} of {total}",
+  "game.hint.caramel": "Sticky! It sticks to the wall",
+  "game.hint.meteor": "Little Meteor pops one key",
+  "game.stuck": "stuck!",
+  "game.unstuck": "unstuck!",
+  "game.poof": "poof!"
 }

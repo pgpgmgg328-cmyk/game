@@ -102,6 +102,10 @@ const CHEER_MS = 1600;
 /** Искорки из хвоста летящего «Метеорчика» — не чаще раза в столько миллисекунд. */
 const TRAIL_MS = 70;
 
+/** Особые клавиши миров, о которых есть подсказка при первой встрече. */
+type SpecialKind = 'caramel' | 'meteor';
+const SPECIAL_KINDS: readonly SpecialKind[] = ['caramel', 'meteor'];
+
 interface Gesture {
   pointerId: number;
   /** aim — ведём прицел; squish — тапнули клавишу; tool — нажатие ушло на инструмент. */
@@ -143,6 +147,8 @@ export class GameScene extends BaseScene {
   private toasts!: Toasts;
   private reveal!: FormReveal;
   private removeHint!: Phaser.GameObjects.Container;
+  /** Подсказки при первой «Карамельке» и первом «Метеорчике»: что они делают. */
+  private specialHints!: Record<SpecialKind, Phaser.GameObjects.Container>;
   private hand!: TutorialHand;
   private banner: Phaser.GameObjects.Container | null = null;
   private gesture: Gesture | null = null;
@@ -277,8 +283,11 @@ export class GameScene extends BaseScene {
     this.toasts.tick(delta, time);
     this.reveal.tick(delta, time);
     this.jarRoot.x = this.jarBaseX + this.shakeOffset;
-    if (this.removeHint.visible && !this.ctx.reducedMotion) {
-      this.removeHint.setAlpha(0.75 + 0.25 * Math.sin(time / 180));
+    if (!this.ctx.reducedMotion) {
+      const pulse = 0.75 + 0.25 * Math.sin(time / 180);
+      for (const hint of [this.removeHint, this.specialHints.caramel, this.specialHints.meteor]) {
+        if (hint.visible) hint.setAlpha(pulse);
+      }
     }
   }
 
@@ -318,6 +327,9 @@ export class GameScene extends BaseScene {
     this.hud.layout(side ? 'side' : 'top', height, visibleLeft, visibleRight, jarBottom);
     this.banner?.setPosition(this.run.jar.width / 2, JAR.height * 0.38);
     this.removeHint.setPosition(this.run.jar.width / 2, JAR.height * 0.22);
+    for (const id of SPECIAL_KINDS) {
+      this.specialHints[id].setPosition(this.run.jar.width / 2, JAR.height * 0.12);
+    }
     // Лёжа плашки встают в левую панель, чтобы не закрывать висящую клавишу.
     if (side) this.toasts.setAnchor(visibleLeft / 2, height - 84, -visibleLeft - 32);
     else this.toasts.setAnchor(360, HUD_TOP_HEIGHT + 64);
@@ -378,7 +390,11 @@ export class GameScene extends BaseScene {
     this.fx = new Particles(this, this.ctx.reducedMotion);
     this.keysLayer = new Phaser.GameObjects.Container(this, 0, 0);
     this.stickerLayer = new Phaser.GameObjects.Container(this, 0, 0);
-    this.removeHint = this.createRemoveHint();
+    this.removeHint = this.createHintPill(this.ctx.t('game.removeHint'), 0xe0708f, '#5a1a33');
+    this.specialHints = {
+      caramel: this.createHintPill(this.ctx.t('game.hint.caramel'), 0xf0a43c, '#6b3a0a'),
+      meteor: this.createHintPill(this.ctx.t('game.hint.meteor'), 0x9d86e8, '#2b2160'),
+    };
     this.hand = new TutorialHand(this);
     this.jarRoot = this.add.container(0, 0, [
       jar.back,
@@ -389,17 +405,26 @@ export class GameScene extends BaseScene {
       this.fx.layer,
       this.stickerLayer,
       this.removeHint,
+      this.specialHints.caramel,
+      this.specialHints.meteor,
       this.hand.layer,
     ]);
   }
 
-  /** Подсказка режима «Удаление»: какую клавишу убрать, игрок выбирает тапом. */
-  private createRemoveHint(): Phaser.GameObjects.Container {
+  /**
+   * Плашка-подсказка над банкой: режим «Удаление» (какую клавишу убрать, игрок выбирает тапом)
+   * или первая встреча с особой клавишей мира. Пока видна — мягко мигает.
+   */
+  private createHintPill(
+    text: string,
+    border: number,
+    color: string,
+  ): Phaser.GameObjects.Container {
     const label = this.createText(
       0,
       0,
-      this.ctx.t('game.removeHint'),
-      { fontSize: '30px', fontStyle: '900', color: '#5a1a33' },
+      text,
+      { fontSize: '30px', fontStyle: '900', color },
       false,
     ).setOrigin(0.5);
     const width = Math.min(JAR.width - 40, label.width + 56);
@@ -408,9 +433,37 @@ export class GameScene extends BaseScene {
     const panel = new Phaser.GameObjects.Graphics(this);
     panel.fillStyle(0xffffff, 0.94);
     panel.fillRoundedRect(-width / 2, -height / 2, width, height, height / 2);
-    panel.lineStyle(4, 0xe0708f, 1);
+    panel.lineStyle(4, border, 1);
     panel.strokeRoundedRect(-width / 2, -height / 2, width, height, height / 2);
     return new Phaser.GameObjects.Container(this, 0, 0, [panel, label]).setVisible(false);
+  }
+
+  /** Висит первая «Карамелька» или первый «Метеорчик» — показать, что они делают. */
+  private updateSpecialHint(): void {
+    const item = this.run.current;
+    const { tutorial } = this.ctx.save.data;
+    const kind: SpecialKind | null = item.meteor ? 'meteor' : item.caramel ? 'caramel' : null;
+    for (const id of SPECIAL_KINDS) {
+      this.specialHints[id].setVisible(kind === id && !tutorial[id]).setAlpha(1);
+    }
+  }
+
+  /** Слово над клавишей («прилипла!», «пуф!»); у стенки — сдвинуто внутрь, чтобы не обрезалось. */
+  private sayAt(x: number, y: number, label: string): void {
+    const margin = 100;
+    this.fx.say(Phaser.Math.Clamp(x, margin, this.run.jar.width - margin), y - 40, label);
+  }
+
+  /** Особую клавишу бросили: подсказка сделала своё дело и больше не покажется. */
+  private specialDropped(): void {
+    for (const id of SPECIAL_KINDS) {
+      const hint = this.specialHints[id];
+      if (!hint.visible) continue;
+      hint.setVisible(false);
+      this.ctx.save.update((draft) => {
+        draft.tutorial[id] = true;
+      });
+    }
   }
 
   /** Текстура формы: обычная или золотая (золотые рисуются при первой встрече). */
@@ -531,6 +584,7 @@ export class GameScene extends BaseScene {
     view.setPosition(this.run.aimX, this.run.hangY());
     this.keysLayer.add(view);
     this.hanging = view;
+    this.updateSpecialHint();
     if (animate && !this.ctx.reducedMotion) {
       view.pop = 0.4;
       this.tweens.add({ targets: view, pop: 1, duration: 220, ease: 'Back.easeOut' });
@@ -592,6 +646,7 @@ export class GameScene extends BaseScene {
         this.ctx.audio.drop();
         this.hanging?.destroy();
         this.hanging = null;
+        this.specialDropped();
         this.updatePreview();
         this.discover(event.key, 'drop');
         break;
@@ -641,23 +696,28 @@ export class GameScene extends BaseScene {
         break;
       case 'stick': {
         const view = this.views.get(event.key.id);
+        const { x, y } = event.key.body.position;
         view?.squash(0.6);
         view?.showFace('squish', 500);
-        this.fx.drips(event.key.body.position.x, event.key.body.position.y);
+        this.fx.drips(x, y);
+        this.sayAt(x, y, this.ctx.t('game.stuck'));
         this.ctx.audio.stick();
         break;
       }
       case 'unstick': {
         const view = this.views.get(event.key.id);
+        const { x, y } = event.key.body.position;
         view?.meltCaramel(this.ctx.reducedMotion);
         view?.squash(-0.3);
-        this.fx.drips(event.key.body.position.x, event.key.body.position.y);
+        this.fx.drips(x, y);
+        this.sayAt(x, y, this.ctx.t('game.unstuck'));
         this.ctx.audio.unstick();
         break;
       }
       case 'meteorDrop':
         this.hanging?.destroy();
         this.hanging = null;
+        this.specialDropped();
         this.createMeteorView(event.meteor);
         this.updatePreview();
         this.ctx.audio.meteorDrop();
@@ -787,6 +847,7 @@ export class GameScene extends BaseScene {
     this.lastImpact.delete(key.id);
     const color = hexToNumber(this.artFor(key.tier, key.golden).colors.base);
     this.fx.stardust(key.body.position.x, key.body.position.y, color);
+    this.sayAt(key.body.position.x, key.body.position.y, this.ctx.t('game.poof'));
     this.ctx.audio.meteorHit();
     if (!view) return;
     if (this.ctx.reducedMotion) {
@@ -1492,6 +1553,8 @@ export class GameScene extends BaseScene {
     jar: string;
     trial: boolean;
     special: 'caramel' | 'meteor' | null;
+    /** Видна подсказка при первой особой клавише. */
+    specialHint: SpecialKind | null;
     meteor: boolean;
     score: number;
     over: boolean;
@@ -1528,6 +1591,7 @@ export class GameScene extends BaseScene {
       jar: this.jarSkin.id,
       trial: this.run.trial,
       special: this.run.current.meteor ? 'meteor' : this.run.current.caramel ? 'caramel' : null,
+      specialHint: SPECIAL_KINDS.find((id) => this.specialHints[id].visible) ?? null,
       meteor: this.run.meteorInFlight !== null,
       score: this.run.score,
       over: this.run.over,

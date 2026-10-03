@@ -103,6 +103,11 @@ export class Particles {
     this.popup(x, y, `${label}\n+${score}`, 26 + tier * 2.4);
   }
 
+  /** Всплывающее слово без очков: «прилипла!», «пуф!». */
+  say(x: number, y: number, label: string): void {
+    this.popup(x, y, label, 32);
+  }
+
   /** Мега-клац двух Пробелов: радужный фейерверк. */
   mega(x: number, y: number, label: string, score: number): void {
     RAINBOW.forEach((color, index) => {

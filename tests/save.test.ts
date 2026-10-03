@@ -20,7 +20,7 @@ describe('readSave', () => {
       upgrades: { shake: 1, remove: 0, preview: 1, squish: 2, golden: 5, jar: 3 },
       album: { classic: { forms: [1, 2, 3, 7], golden: [2] } },
       achievements: ['first_clack', 'caps'],
-      tutorial: { done: true, squish: false },
+      tutorial: { done: true, squish: false, caramel: true, meteor: false },
       purchases: { noAds: true, skinsPack: false, granted: ['t-1'] },
       prompts: { review: true, shortcut: false },
       worlds: { selected: 'candy', bought: ['candy'] },
@@ -85,7 +85,7 @@ describe('readSave', () => {
         upgrades: { shake: 3, remove: 2, preview: 0, squish: 0, golden: 0, jar: 0 },
         album: { classic: { forms: [1, 2, 3], golden: [] } },
         achievements: ['caps'],
-        tutorial: { done: false, squish: true },
+        tutorial: { done: false, squish: true, caramel: false, meteor: false },
         purchases: { noAds: false, skinsPack: true, granted: ['a', 'b'] },
         prompts: { review: false, shortcut: false },
         worlds: { selected: '', bought: ['candy'] },
@@ -123,7 +123,7 @@ describe('readSave', () => {
         upgrades: { shake: 2, remove: 0, preview: 0, squish: 0, golden: 0, jar: 0 },
         album: { classic: { forms: [1, 2], golden: [] } },
         achievements: ['first_clack'],
-        tutorial: { done: true, squish: true },
+        tutorial: { done: true, squish: true, caramel: false, meteor: false },
       },
     });
   });
@@ -183,11 +183,16 @@ describe('readSave', () => {
         rev: 4,
         settings: { sound: true, music: false },
         stats: { bestScore: 700, runs: 3, merges: 0, goldenMerges: 0, megas: 0 },
-        tutorial: { done: true, squish: true },
+        tutorial: { done: true, squish: true, caramel: false, meteor: false },
       },
     });
     const fresh = readSave({ v: 2, rev: 1, stats: { bestScore: 0, runs: 0 } });
-    expect(fresh.kind === 'ok' && fresh.save.tutorial).toEqual({ done: false, squish: false });
+    expect(fresh.kind === 'ok' && fresh.save.tutorial).toEqual({
+      done: false,
+      squish: false,
+      caramel: false,
+      meteor: false,
+    });
   });
 
   it('распознаёт сохранение из более новой версии игры', () => {

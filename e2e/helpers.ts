@@ -192,6 +192,7 @@ export interface E2eRunState {
   jar: string;
   trial: boolean;
   special: 'caramel' | 'meteor' | null;
+  specialHint: 'caramel' | 'meteor' | null;
   meteor: boolean;
   score: number;
   over: boolean;
@@ -225,7 +226,7 @@ const ALL_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 export const VETERAN_SAVE = {
   album: { classic: { forms: ALL_TIERS, golden: ALL_TIERS } },
   achievements: ['first_clack', 'caps', 'spacebar', 'mega', 'golden_rush', 'collector_classic'],
-  tutorial: { done: true, squish: true },
+  tutorial: { done: true, squish: true, caramel: true, meteor: true },
 };
 
 /** Подменить части сохранения (хук patchSave; данные проходят обычную проверку сохранения). */

@@ -126,6 +126,52 @@ test.describe('миры (диздок, раздел 5)', () => {
     expect(problems).toEqual([]);
   });
 
+  test('первая «Карамелька» и первый «Метеорчик»: подсказка до броска, потом больше не нужна', async ({
+    page,
+  }) => {
+    const problems = watchConsole(page);
+    interface TutorialSave {
+      tutorial: { caramel: boolean; meteor: boolean };
+    }
+    const tutorial = async () => (await e2eState<TutorialSave>(page, 'save')).tutorial;
+    await openGame(page, { lang: 'ru', seed: '5' });
+    await patchSave(page, {
+      ...VETERAN_SAVE,
+      tutorial: { done: true, squish: true, caramel: false, meteor: false },
+      worlds: { selected: 'candy', bought: ['candy', 'space'] },
+    });
+    await press(page, 'menu.play');
+    await waitScene(page, 'Game');
+    await waitCanDrop(page);
+    expect((await runState(page)).specialHint).toBeNull();
+    await e2eCall(page, 'setSpecial', 'caramel', 2);
+    expect(await runState(page)).toMatchObject({ special: 'caramel', specialHint: 'caramel' });
+    await page.keyboard.press('Space');
+    await waitRun(page, (s) => s.specialHint === null && s.special === null);
+    await expect.poll(tutorial).toMatchObject({ caramel: true, meteor: false });
+    // Вторая «Карамелька» — без подсказки.
+    await waitCanDrop(page);
+    await e2eCall(page, 'setSpecial', 'caramel', 2);
+    expect(await runState(page)).toMatchObject({ special: 'caramel', specialHint: null });
+
+    // «Метеорчик» — в космическом мире.
+    await e2eCall(page, 'endRun');
+    await waitScene(page, 'Result', 60_000);
+    await press(page, 'result.menu');
+    await waitScene(page, 'Menu', 30_000);
+    await press(page, 'menu.nextWorld');
+    await expect.poll(() => menuState(page)).toMatchObject({ world: 'space', locked: false });
+    await press(page, 'menu.play');
+    await waitScene(page, 'Game');
+    await waitCanDrop(page);
+    await e2eCall(page, 'setSpecial', 'meteor');
+    expect(await runState(page)).toMatchObject({ special: 'meteor', specialHint: 'meteor' });
+    await page.keyboard.press('Space');
+    await waitRun(page, (s) => s.specialHint === null);
+    await expect.poll(tutorial).toMatchObject({ caramel: true, meteor: true });
+    expect(problems).toEqual([]);
+  });
+
   test('Пробел открывает следующий мир: плашка в забеге и строка на экране результата', async ({
     page,
   }) => {

@@ -44,6 +44,10 @@ export interface Tutorial {
   done: boolean;
   /** Игрок уже тапал по клавише — подсказка про сквиш больше не нужна. */
   squish: boolean;
+  /** Первую «Карамельку» уже бросили — подсказка про неё больше не нужна. */
+  caramel: boolean;
+  /** Первый «Метеорчик» уже бросили. */
+  meteor: boolean;
 }
 
 /** Покупки (config/iap.ts). Постоянные ещё и восстанавливаются из getPurchases() при каждом запуске. */
@@ -154,7 +158,7 @@ export function createDefaultSave(): Save {
     upgrades: { shake: 0, remove: 0, preview: 0, squish: 0, golden: 0, jar: 0 },
     album: {},
     achievements: [],
-    tutorial: { done: false, squish: false },
+    tutorial: { done: false, squish: false, caramel: false, meteor: false },
     purchases: { noAds: false, skinsPack: false, granted: [] },
     prompts: { review: false, shortcut: false },
     worlds: { selected: '', bought: [] },
@@ -306,6 +310,8 @@ export function sanitizeSave(data: JsonObject): Save {
     tutorial: {
       done: booleanOr(tutorial.done, false),
       squish: booleanOr(tutorial.squish, false),
+      caramel: booleanOr(tutorial.caramel, false),
+      meteor: booleanOr(tutorial.meteor, false),
     },
     purchases: {
       noAds: booleanOr(purchases.noAds, false),

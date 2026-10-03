@@ -147,5 +147,10 @@
   "decor.source.pack": "Есть в «Наборе украшений»",
   "decor.source.streak": "За 7 дней заданий подряд",
   "album.tab.medals": "Медали",
-  "album.earned": "Получено {found} из {total}"
+  "album.earned": "Получено {found} из {total}",
+  "game.hint.caramel": "Липкая! Прилипнет к стенке",
+  "game.hint.meteor": "Метеорчик уберёт одну клавишу",
+  "game.stuck": "прилипла!",
+  "game.unstuck": "отлипла!",
+  "game.poof": "пуф!"
 }
