@@ -16,6 +16,9 @@ import { COLORS } from '../ui/theme';
 /** Парящие клавиши плывут и чуть сдвигаются за пальцем или мышью. */
 const FLOATING = { speed: 12, parallax: 56 } as const;
 const STATIC_KEY = 'bg-static';
+/** Снимок прежнего фона на время плавной смены мира или фона. */
+const FADE_KEY = 'bg-fade';
+const FADE_MS = 420;
 
 /**
  * Фон на весь экран (диздок, раздел 12): мягкий градиент мира с едва заметной клавиатурой
@@ -30,6 +33,8 @@ export class BackgroundScene extends Phaser.Scene {
   private backdrop!: Phaser.GameObjects.Image;
   private floating: Phaser.GameObjects.TileSprite | null = null;
   private panel!: Phaser.GameObjects.Graphics;
+  /** Прежний фон поверх нового: тает при смене мира. */
+  private fade: Phaser.GameObjects.Image | null = null;
   private theme: ThemeData = THEMES[0]!;
   private skin: BackgroundSkin = BACKGROUNDS[0]!;
   private layout: Layout | null = null;
@@ -80,10 +85,14 @@ export class BackgroundScene extends Phaser.Scene {
     tile.tilePositionY = this.drift * FLOATING.speed * 0.35 + this.parallax.y * FLOATING.parallax;
   }
 
-  /** Фон мира: градиент и узоры в его цветах (или в цветах выбранного фона из «Украшений»). */
+  /**
+   * Фон мира: градиент и узоры в его цветах (или в цветах выбранного фона из «Украшений»).
+   * Прежний фон плавно тает поверх нового.
+   */
   setTheme(theme: ThemeData): void {
     const skin = this.currentSkin();
     if ((theme === this.theme && skin === this.skin) || !this.backdrop) return;
+    if (!this.reducedMotion) this.startFade();
     this.theme = theme;
     this.skin = skin;
     if (this.floating) {
@@ -91,6 +100,38 @@ export class BackgroundScene extends Phaser.Scene {
       this.floating.setTexture(this.floatingKey());
     }
     if (this.layout) this.applyLayout(this.layout);
+  }
+
+  /** Снимок нынешнего фона поверх всего, кроме подложки колонки; тает за FADE_MS. */
+  private startFade(): void {
+    this.finishFade();
+    const layout = this.layout;
+    if (!layout || !this.textures.exists(STATIC_KEY)) return;
+    const source = this.textures.get(STATIC_KEY) as Phaser.Textures.CanvasTexture;
+    const copy = this.textures.createCanvas(FADE_KEY, source.width, source.height);
+    if (!copy) return;
+    copy.getContext().drawImage(source.getCanvas(), 0, 0);
+    copy.refresh();
+    const fade = this.add.image(0, 0, FADE_KEY).setOrigin(0, 0);
+    fade.setDisplaySize(layout.canvasWidth, layout.canvasHeight);
+    this.children.moveBelow(fade, this.panel);
+    this.fade = fade;
+    this.tweens.add({
+      targets: fade,
+      alpha: 0,
+      duration: FADE_MS,
+      ease: 'Sine.easeInOut',
+      onComplete: () => this.finishFade(),
+    });
+  }
+
+  private finishFade(): void {
+    if (this.fade) {
+      this.tweens.killTweensOf(this.fade);
+      this.fade.destroy();
+      this.fade = null;
+    }
+    if (this.textures.exists(FADE_KEY)) this.textures.remove(FADE_KEY);
   }
 
   /** Игрок выбрал другой фон в «Украшениях». */
@@ -151,6 +192,8 @@ export class BackgroundScene extends Phaser.Scene {
   }
 
   private applyLayout(layout: Layout): void {
+    // Снимок старого размера на новом экране не нужен: смена размера сразу заканчивает таяние.
+    if (layout !== this.layout) this.finishFade();
     this.layout = layout;
     this.cameras.main.setSize(layout.canvasWidth, layout.canvasHeight);
     this.drawBackdrop(layout);

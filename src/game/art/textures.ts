@@ -127,47 +127,58 @@ function ensureKeyTexture(
  * повторный вызов ничего не перерисовывает.
  */
 export function ensureThemeArt(scene: Phaser.Scene, theme: ThemeData, lang: Lang): KeyArt[] {
-  return theme.forms.map((form) => {
-    const width = form.size.w * UNIT;
-    const height = form.size.h * UNIT;
-    const geometry = keycapGeometry(width, height);
-    const label = keyLabel(form, lang);
-    const layout = faceLayout(geometry, form.face, labelBox(measureContext(), geometry, label));
-    const art: KeyArt = {
-      tier: form.tier,
-      key: `key:${theme.id}:${form.tier}:${lang}`,
-      face: `face:${theme.id}:${form.tier}:${lang}`,
-      width,
-      height,
-      faceLayout: layout,
-      colors: keyColors(form.paint),
-      golden: false,
-    };
+  return theme.forms.map((form) => ensureFormArt(scene, theme, form, lang));
+}
 
-    ensureKeyTexture(scene, art.key, theme, form, lang, false);
+/**
+ * Текстуры одной формы мира — для экранов, где видно лишь несколько клавиш (миры, задания,
+ * рекорды): остальные формы мира не рисуются, пока не понадобятся.
+ */
+export function ensureFormArt(
+  scene: Phaser.Scene,
+  theme: ThemeData,
+  form: FormData,
+  lang: Lang,
+): KeyArt {
+  const width = form.size.w * UNIT;
+  const height = form.size.h * UNIT;
+  const geometry = keycapGeometry(width, height);
+  const label = keyLabel(form, lang);
+  const layout = faceLayout(geometry, form.face, labelBox(measureContext(), geometry, label));
+  const art: KeyArt = {
+    tier: form.tier,
+    key: `key:${theme.id}:${form.tier}:${lang}`,
+    face: `face:${theme.id}:${form.tier}:${lang}`,
+    width,
+    height,
+    faceLayout: layout,
+    colors: keyColors(form.paint),
+    golden: false,
+  };
 
-    if (!scene.textures.exists(art.face)) {
-      const frameWidth = layout.frameWidth * TEXTURE_SCALE;
-      const frameHeight = layout.frameHeight * TEXTURE_SCALE;
-      const canvas = createCanvas(scene, art.face, frameWidth * FACE_FRAMES.length, frameHeight);
-      if (canvas) {
-        FACE_FRAMES.forEach((frame, index) => {
-          canvas.ctx.setTransform(
-            TEXTURE_SCALE,
-            0,
-            0,
-            TEXTURE_SCALE,
-            index * frameWidth + frameWidth / 2,
-            frameHeight / 2,
-          );
-          drawFace(canvas.ctx, form.face, frame, layout.size, theme.palette.face);
-          canvas.texture.add(frame, 0, index * frameWidth, 0, frameWidth, frameHeight);
-        });
-        canvas.texture.refresh();
-      }
+  ensureKeyTexture(scene, art.key, theme, form, lang, false);
+
+  if (!scene.textures.exists(art.face)) {
+    const frameWidth = layout.frameWidth * TEXTURE_SCALE;
+    const frameHeight = layout.frameHeight * TEXTURE_SCALE;
+    const canvas = createCanvas(scene, art.face, frameWidth * FACE_FRAMES.length, frameHeight);
+    if (canvas) {
+      FACE_FRAMES.forEach((frame, index) => {
+        canvas.ctx.setTransform(
+          TEXTURE_SCALE,
+          0,
+          0,
+          TEXTURE_SCALE,
+          index * frameWidth + frameWidth / 2,
+          frameHeight / 2,
+        );
+        drawFace(canvas.ctx, form.face, frame, layout.size, theme.palette.face);
+        canvas.texture.add(frame, 0, index * frameWidth, 0, frameWidth, frameHeight);
+      });
+      canvas.texture.refresh();
     }
-    return art;
-  });
+  }
+  return art;
 }
 
 /**

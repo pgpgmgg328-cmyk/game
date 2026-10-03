@@ -10,7 +10,7 @@ import {
 import { formatNumber } from '../../i18n';
 import { formOf, getTheme } from '../../themes';
 import { drawJarIcon } from '../art/jarIcon';
-import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt } from '../art/textures';
+import { UI_ART, ensureFormArt, ensureFxArt, ensureUiArt } from '../art/textures';
 import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
 import { Button, drawIcon } from '../ui/Button';
@@ -190,7 +190,7 @@ export class DailyScene extends BaseScene {
     }
     parts.push(...this.reward(y, taskReward(task)));
     const tier = Math.min(task.tier, theme.forms.length);
-    const art = ensureThemeArt(this, theme, lang)[tier - 1]!;
+    const art = ensureFormArt(this, theme, formOf(theme, tier), lang);
     const keycap = new Keycap(this, art, { idle: !this.ctx.reducedMotion, random: Math.random });
     keycap.baseScale = Math.min(1.4, 190 / art.width, 120 / art.height);
     keycap.setPosition(CARD_X + 140, y + 158);

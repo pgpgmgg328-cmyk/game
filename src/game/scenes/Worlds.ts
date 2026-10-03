@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { buyWorld, canBuyWorld, isWorldUnlocked, unlockPrice } from '../../core/meta/worlds';
 import { formatNumber } from '../../i18n';
-import { THEMES, WORLD_SIZES, type ThemeData } from '../../themes';
+import { THEMES, WORLD_SIZES, formOf, type ThemeData } from '../../themes';
 import { hexToNumber } from '../art/color';
-import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt } from '../art/textures';
+import { UI_ART, ensureFormArt, ensureFxArt, ensureUiArt } from '../art/textures';
 import { Keycap } from '../objects/Keycap';
 import { Particles } from '../objects/Particles';
 import { Toasts } from '../objects/Toasts';
@@ -177,9 +177,9 @@ export class WorldsScene extends BaseScene {
     const parts: Phaser.GameObjects.GameObject[] = [card, name, about, progress];
 
     // Три формы мира: открытые — цветные, остальные — силуэтом (тайна для альбома).
-    const arts = ensureThemeArt(this, theme, lang);
+    // Рисуются только они: весь мир — когда в нём начнётся забег.
     const keycaps = SHOWN_TIERS.map((tier, slot) => {
-      const art = arts[tier - 1]!;
+      const art = ensureFormArt(this, theme, formOf(theme, tier), lang);
       const keycap = new Keycap(this, art, {
         idle: !this.ctx.reducedMotion && forms.includes(tier),
         random: Math.random,

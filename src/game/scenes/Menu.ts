@@ -7,7 +7,7 @@ import { isWorldUnlocked, selectedWorldIndex } from '../../core/meta/worlds';
 import { SecretWordTracker } from '../../core/menu/easterEggs';
 import type { RunSnapshot } from '../../core/run/snapshot';
 import { formatNumber, type TranslationKey } from '../../i18n';
-import { THEMES, WORLD_SIZES, type ThemeData } from '../../themes';
+import { THEMES, WORLD_SIZES, formOf, type ThemeData } from '../../themes';
 import { achievementTitle } from '../achievementText';
 import { UI_ART, ensureFxArt, ensureThemeArt, ensureUiArt, type KeyArt } from '../art/textures';
 import { keycapRain } from '../objects/KeycapRain';
@@ -378,6 +378,9 @@ export class MenuScene extends BaseScene {
     );
     this.updateWorldButtons();
     this.layoutScreen(this.screenHeight);
+    // Мир «здоровается» своим голосом — звуком слияния средней клавиши, сразу после щелчка кнопки.
+    const voice = formOf(this.theme, 3).sound;
+    this.time.delayedCall(120, () => this.ctx.audio.form(voice, 0));
     if (!this.ctx.reducedMotion) {
       this.worldName.setScale(0.9);
       this.tweens.add({ targets: this.worldName, scale: 1, duration: 220, ease: 'Back.easeOut' });

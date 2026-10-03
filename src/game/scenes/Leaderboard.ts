@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { formatNumber } from '../../i18n';
 import type { LeaderboardData, LeaderboardRow } from '../../platform';
 import { DEFAULT_THEME_ID, THEMES, getTheme } from '../../themes';
-import { ensureThemeArt, type KeyArt } from '../art/textures';
+import { ensureFormArt, type KeyArt } from '../art/textures';
 import { Keycap } from '../objects/Keycap';
 import { Button } from '../ui/Button';
 import { ScrollPanel } from '../ui/ScrollPanel';
@@ -50,7 +50,10 @@ export class LeaderboardScene extends BaseScene {
     this.rows = [];
     this.busy = false;
     const theme = getTheme(DEFAULT_THEME_ID) ?? THEMES[0]!;
-    this.arts = ensureThemeArt(this, theme, lang);
+    // Клавиши-аватарки — только маленькие формы первого мира.
+    this.arts = theme.forms
+      .slice(0, AVATAR_TIERS)
+      .map((form) => ensureFormArt(this, theme, form, lang));
     this.title = this.createText(360, 0, t('leaderboard.title'), titleStyle(64)).setOrigin(0.5);
     this.best = this.createText(
       360,
@@ -198,7 +201,7 @@ export class LeaderboardScene extends BaseScene {
     ).setOrigin(0.5);
     rank.setScale(Math.min(1, 50 / rank.width));
 
-    const art = this.arts[row.seed % Math.min(AVATAR_TIERS, this.arts.length)]!;
+    const art = this.arts[row.seed % this.arts.length]!;
     const keycap = new Keycap(this, art, { idle: !this.ctx.reducedMotion, random: Math.random });
     keycap.baseScale = Math.min(1, 56 / Math.max(art.width, art.height));
     keycap.setPosition(left + 124, centerY);
