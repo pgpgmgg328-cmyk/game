@@ -98,6 +98,12 @@ for (const size of SIZES) {
       await expectNoPageScroll(page);
       await expectButtonsFit(page);
       if (size.allScreens) await screenshot(page, `album-ru-${name}`);
+      await press(page, 'album.tab.medals', size.mobile);
+      await expect
+        .poll(async () => (await e2eState<{ tab: string } | null>(page, 'album'))?.tab)
+        .toBe('medals');
+      await expectButtonsFit(page);
+      if (size.allScreens) await screenshot(page, `album-medals-ru-${name}`);
       await press(page, 'common.back', size.mobile);
       await waitScene(page, 'Menu');
       await press(page, 'menu.upgrades', size.mobile);

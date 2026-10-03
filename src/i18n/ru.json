@@ -145,5 +145,7 @@
   "decor.select": "Выбрать",
   "decor.selected": "Выбрано",
   "decor.source.pack": "Есть в «Наборе украшений»",
-  "decor.source.streak": "За 7 дней заданий подряд"
+  "decor.source.streak": "За 7 дней заданий подряд",
+  "album.tab.medals": "Медали",
+  "album.earned": "Получено {found} из {total}"
 }

@@ -145,5 +145,7 @@
   "decor.select": "Choose",
   "decor.selected": "Chosen",
   "decor.source.pack": "In the Decor Pack",
-  "decor.source.streak": "For a 7-day task streak"
+  "decor.source.streak": "For a 7-day task streak",
+  "album.tab.medals": "Medals",
+  "album.earned": "Earned {found} of {total}"
 }

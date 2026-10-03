@@ -265,7 +265,17 @@ test.describe('мета в забеге', () => {
     expect(problems).toEqual([]);
   });
 
-  test('альбом открывается, листается и возвращает в меню', async ({ page }) => {
+  test('альбом: вкладки миров и медалей, клавиши мира рисуются при открытии вкладки', async ({
+    page,
+  }) => {
+    interface AlbumState {
+      tab: string;
+      tabs: { id: string; badge: string; latched: boolean }[];
+      drawnWorlds: string[];
+      cells: number;
+    }
+    const album = async (): Promise<AlbumState> =>
+      (await e2eCall<AlbumState | null>(page, 'album'))!;
     const problems = watchConsole(page);
     await openGame(page, { lang: 'ru', seed: '5' });
     await patchSave(page, {
@@ -275,9 +285,34 @@ test.describe('мета в забеге', () => {
     await press(page, 'menu.album', true);
     await waitScene(page, 'Album');
     await expectButtonsFit(page);
+    const first = await album();
+    // Открыт мир из меню; на вкладках — процент мира (8 из 22) и число медалей.
+    expect(first.tab).toBe('classic');
+    expect(first.tabs).toEqual([
+      { id: 'classic', badge: '36%', latched: true },
+      { id: 'candy', badge: '0%', latched: false },
+      { id: 'space', badge: '0%', latched: false },
+      { id: 'medals', badge: '2/11', latched: false },
+    ]);
+    expect(first.cells).toBe(22);
+    // Клавиши других миров ещё не рисовались.
+    expect(first.drawnWorlds).toEqual(['classic']);
     await page.mouse.move(195, 420);
     await page.mouse.wheel(0, 2000);
     await page.waitForTimeout(300);
+
+    await press(page, 'album.tab.space', true);
+    await expect.poll(async () => (await album()).tab).toBe('space');
+    expect((await album()).drawnWorlds).toEqual(['classic', 'space']);
+    await expectButtonsFit(page);
+    await press(page, 'album.tab.medals', true);
+    await expect.poll(async () => (await album()).tab).toBe('medals');
+    expect((await album()).cells).toBe(0);
+    // Стрелки листают вкладки по кругу.
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(async () => (await album()).tab).toBe('classic');
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(async () => (await album()).tab).toBe('medals');
     await press(page, 'common.back', true);
     await waitScene(page, 'Menu');
     expect(problems).toEqual([]);

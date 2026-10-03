@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { sanitizeSave } from '../core/save/schema';
 import type { GameContext } from './context';
 import { e2eParams } from './e2eParams';
+import type { AlbumScene } from './scenes/Album';
 import type { BackgroundScene } from './scenes/Background';
 import { BaseScene } from './scenes/BaseScene';
 import type { GameScene } from './scenes/Game';
@@ -102,6 +103,11 @@ export function installE2eHooks(game: Phaser.Game, ctx: GameContext): void {
     /** Экран «Миры»: какие миры открыты и что написано на кнопке пробного забега. */
     worlds: () => {
       const scene = game.scene.getScene('Worlds') as WorldsScene | null;
+      return scene && scene.sys.isActive() ? scene.debugState() : null;
+    },
+    /** Альбом: открытая вкладка, значки вкладок, миры с уже нарисованными клавишами. */
+    album: () => {
+      const scene = game.scene.getScene('Album') as AlbumScene | null;
       return scene && scene.sys.isActive() ? scene.debugState() : null;
     },
     /** Фон: какой мир и какой фон из «Украшений» сейчас нарисованы. */

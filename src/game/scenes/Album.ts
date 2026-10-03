@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { achievementList, type AchievementDef } from '../../core/meta/achievements';
 import { albumProgress, isDiscovered } from '../../core/meta/album';
+import { selectedWorldIndex } from '../../core/meta/worlds';
 import { formatNumber } from '../../i18n';
 import { THEMES, WORLD_SIZES, type ThemeData } from '../../themes';
 import { achievementHint, achievementTitle } from '../achievementText';
@@ -27,6 +28,12 @@ const ROW_HEIGHT = 118;
 const SECTION_GAP = 36;
 const HEADER_HEIGHT = 78;
 const SILHOUETTE = 0x8e86b8;
+/** Вкладки: три мира и медали — в один ряд над списком. */
+const TAB_GAP = 12;
+const TAB_HEIGHT = 110;
+
+/** Вкладка альбома: формы одного мира или достижения. */
+type AlbumTab = { kind: 'world'; theme: ThemeData } | { kind: 'medals' };
 
 /** Клетка формы: где лежит (в координатах содержимого) и какая клавиша в ней. */
 interface FormCell {
@@ -38,9 +45,11 @@ interface FormCell {
 }
 
 /**
- * Альбом (диздок, раздел 6): все формы мира и их золотые версии, открытые — цветные, с именем
- * и смешной подписью, неоткрытые — силуэт с «?». Ниже — достижения; секретные до получения
- * скрыты. Открытую клавишу можно потискать: она сминается и пищит.
+ * Альбом (диздок, раздел 6): вкладка на каждый мир — его формы и золотые версии, открытые —
+ * цветные, с именем и смешной подписью, неоткрытые — силуэт с «?»; последняя вкладка —
+ * достижения, секретные до получения скрыты. На вкладке — процент её коллекции. Клавиши мира
+ * рисуются, только когда его вкладку открыли (диздок, раздел 15). Открытую клавишу можно
+ * потискать: она сминается и пищит.
  */
 export class AlbumScene extends BaseScene {
   private title!: Phaser.GameObjects.Text;
@@ -48,6 +57,8 @@ export class AlbumScene extends BaseScene {
   private progressBar!: Phaser.GameObjects.Graphics;
   private back!: Button;
   private panel!: ScrollPanel;
+  private tabs: { tab: AlbumTab; button: Button; badge: string }[] = [];
+  private current = 0;
   private cells: FormCell[] = [];
   private percent = 0;
 
@@ -72,7 +83,7 @@ export class AlbumScene extends BaseScene {
     ).setOrigin(0.5);
     this.progressBar = this.add.graphics();
     this.panel = new ScrollPanel(this, (x, y) => this.tapAt(x, y));
-    this.panel.setContentHeight(this.buildContent());
+    this.createTabs();
     this.back = new Button(this, 360, 0, {
       id: 'common.back',
       label: t('common.back'),
@@ -81,8 +92,13 @@ export class AlbumScene extends BaseScene {
     });
     this.onKeyAction((action) => {
       if (action === 'pause' || action === 'drop') this.scene.start('Menu');
+      // Стрелки листают вкладки.
+      else if (action === 'left') this.showTab(this.current - 1);
+      else if (action === 'right') this.showTab(this.current + 1);
     });
     this.layoutScreen(this.screenHeight);
+    // Сначала открыт мир, выбранный в меню.
+    this.showTab(selectedWorldIndex(save.data, WORLD_SIZES), true);
   }
 
   override update(time: number, delta: number): void {
@@ -94,13 +110,78 @@ export class AlbumScene extends BaseScene {
     const compact = height < 1000;
     const titleY = compact ? 54 : Math.min(Math.max(height * 0.06, 60), 120);
     this.title.setFontSize(compact ? 52 : 64).setPosition(360, titleY);
-    this.progressText.setPosition(360, titleY + (compact ? 58 : 72));
+    // На лежащем телефоне общий процент не помещается: проценты остаются на вкладках.
+    this.progressText.setVisible(!compact).setPosition(360, titleY + 72);
     const barY = this.progressText.y + 34;
+    this.progressBar.setVisible(!compact);
     this.drawProgress(barY);
+    // Над вкладкой торчит значок с процентом: оставляем ему место.
+    const tabsY = (compact ? titleY + 40 : barY + 10) + 40 + TAB_HEIGHT / 2;
+    const tabWidth = this.tabWidth();
+    this.tabs.forEach(({ button }, index) => {
+      button.setPosition(24 + tabWidth / 2 + index * (tabWidth + TAB_GAP), tabsY);
+    });
     this.back.setPosition(360, height - Math.max(24, height * 0.03) - 55);
-    const top = barY + 30;
+    const top = tabsY + TAB_HEIGHT / 2 + 14;
     const bottom = this.back.y - 55 - 16;
     this.panel.setArea(0, top, 720, Math.max(100, bottom - top));
+  }
+
+  private tabWidth(count = this.tabs.length): number {
+    const tabs = Math.max(1, count);
+    return (672 - (tabs - 1) * TAB_GAP) / tabs;
+  }
+
+  /** Вкладки миров (короткие имена) и медалей; значок — сколько собрано. */
+  private createTabs(): void {
+    const { t, lang, save } = this.ctx;
+    const list: AlbumTab[] = [
+      ...THEMES.map((theme): AlbumTab => ({ kind: 'world', theme })),
+      { kind: 'medals' },
+    ];
+    const width = this.tabWidth(list.length);
+    this.tabs = list.map((tab, index) => {
+      const button = new Button(this, 0, 0, {
+        id: tab.kind === 'world' ? `album.tab.${tab.theme.id}` : 'album.tab.medals',
+        label: tab.kind === 'world' ? tab.theme.shortName[lang] : t('album.tab.medals'),
+        width,
+        height: TAB_HEIGHT,
+        // Один размер на всех вкладках: длинное имя не должно выглядеть мельче короткого.
+        fontSize: 26,
+        onClick: () => this.showTab(index),
+      });
+      let badge: string;
+      if (tab.kind === 'world') {
+        const world = WORLD_SIZES.find((item) => item.id === tab.theme.id);
+        badge = `${albumProgress(save.data.album, world ? [world] : []).percent}%`;
+      } else {
+        const { earned, total } = this.medalCount();
+        badge = `${earned}/${total}`;
+      }
+      button.setBadge(badge);
+      return { tab, button, badge };
+    });
+  }
+
+  private medalCount(): { earned: number; total: number } {
+    const owned = this.ctx.save.data.achievements;
+    const list = achievementList(WORLD_SIZES);
+    return { earned: list.filter((def) => owned.includes(def.id)).length, total: list.length };
+  }
+
+  /** Открыть вкладку: содержимое строится заново, список — с начала. */
+  private showTab(index: number, force = false): void {
+    const count = this.tabs.length;
+    const next = ((index % count) + count) % count;
+    if (next === this.current && !force) return;
+    this.current = next;
+    this.tabs.forEach(({ button }, i) => button.setLatched(i === next));
+    this.panel.content.removeAll(true);
+    this.cells = [];
+    const { tab } = this.tabs[next]!;
+    const height = tab.kind === 'world' ? this.buildWorld(tab.theme) : this.buildMedals();
+    this.panel.setContentHeight(height);
+    this.panel.scrollTo(0);
   }
 
   private drawProgress(y: number): void {
@@ -116,31 +197,53 @@ export class AlbumScene extends BaseScene {
     g.strokeRoundedRect(360 - width / 2, y - 10, width, 20, 10);
   }
 
-  /** Строит содержимое альбома и возвращает его высоту. */
-  private buildContent(): number {
-    let y = 8;
-    for (const theme of THEMES) {
-      y = this.sectionHeader(theme.name[this.ctx.lang], y);
-      const art = ensureThemeArt(this, theme, this.ctx.lang);
-      y = this.formGrid(theme, art, false, y);
-      y = this.sectionHeader(this.ctx.t('album.golden'), y + SECTION_GAP);
-      y = this.formGrid(theme, art, true, y);
-      y += SECTION_GAP;
-    }
-    y = this.sectionHeader(this.ctx.t('album.achievements'), y);
-    const owned = this.ctx.save.data.achievements;
+  /** Вкладка мира: имя, сколько собрано, формы и золотые формы. Возвращает высоту. */
+  private buildWorld(theme: ThemeData): number {
+    const { t, lang, save } = this.ctx;
+    const world = WORLD_SIZES.find((item) => item.id === theme.id);
+    const progress = albumProgress(save.data.album, world ? [world] : []);
+    let y = this.sectionHeader(theme.name[lang], 0);
+    y = this.subtitle(t('album.progress', { found: progress.found, total: progress.total }), y);
+    const art = ensureThemeArt(this, theme, lang);
+    y = this.formGrid(theme, art, false, y);
+    y = this.sectionHeader(t('album.golden'), y + SECTION_GAP);
+    y = this.formGrid(theme, art, true, y);
+    return y + 16;
+  }
+
+  /** Вкладка медалей: все достижения; секретные до получения скрыты. Возвращает высоту. */
+  private buildMedals(): number {
+    const { t, save } = this.ctx;
+    const { earned, total } = this.medalCount();
+    let y = this.sectionHeader(t('album.achievements'), 0);
+    y = this.subtitle(t('album.earned', { found: earned, total }), y);
+    const owned = save.data.achievements;
     for (const def of achievementList(WORLD_SIZES)) {
       this.achievementRow(def, owned.includes(def.id), y);
       y += ROW_HEIGHT + 10;
     }
-    return y + 16;
+    return y + 6;
   }
 
   private sectionHeader(text: string, y: number): number {
     const label = this.createText(360, y + HEADER_HEIGHT / 2, text, titleStyle(40), false);
     label.setOrigin(0.5);
+    label.setScale(Math.min(1, 660 / label.width));
     this.panel.content.add(label);
     return y + HEADER_HEIGHT;
+  }
+
+  /** Строка «сколько собрано» под заголовком вкладки. */
+  private subtitle(text: string, y: number): number {
+    const label = this.createText(
+      360,
+      y + 14,
+      text,
+      { fontSize: '28px', fontStyle: '800', color: '#6b5fb3' },
+      false,
+    ).setOrigin(0.5);
+    this.panel.content.add(label);
+    return y + 52;
   }
 
   private formGrid(
@@ -262,6 +365,31 @@ export class AlbumScene extends BaseScene {
       reward.setAlpha(0.5);
     }
     this.panel.content.add([card, medal, title, hint, coin, reward]);
+  }
+
+  /**
+   * Для автотестов: открытая вкладка, значки вкладок и миры, чьи клавиши уже нарисованы
+   * (они рисуются лениво — когда открыли вкладку мира или другой экран с этим миром).
+   */
+  debugState(): {
+    tab: string;
+    tabs: { id: string; badge: string; latched: boolean }[];
+    drawnWorlds: string[];
+    cells: number;
+  } {
+    const id = (tab: AlbumTab): string => (tab.kind === 'world' ? tab.theme.id : 'medals');
+    return {
+      tab: id(this.tabs[this.current]!.tab),
+      tabs: this.tabs.map(({ tab, button, badge }) => ({
+        id: id(tab),
+        badge,
+        latched: button.isLatched,
+      })),
+      drawnWorlds: THEMES.filter((theme) =>
+        this.textures.exists(`key:${theme.id}:1:${this.ctx.lang}`),
+      ).map((theme) => theme.id),
+      cells: this.cells.length,
+    };
   }
 
   /** Пасхалка: открытую клавишу в альбоме можно потискать — она сминается и пищит. */

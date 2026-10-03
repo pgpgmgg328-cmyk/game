@@ -88,6 +88,8 @@ export class Button extends Phaser.GameObjects.Container {
   private buttonHeight: number;
   private pressed = false;
   private hovered = false;
+  /** Клавиша «залипла» нажатой, как Caps Lock: выбранная вкладка. */
+  private latched = false;
   private disabled = false;
   private badge: Phaser.GameObjects.Text | null = null;
   /** В углу значок «▶»: ещё можно получить за рекламу. */
@@ -225,6 +227,20 @@ export class Button extends Phaser.GameObjects.Container {
     return this;
   }
 
+  /** Выбранная вкладка: клавиша остаётся нажатой и становится мятной. */
+  setLatched(latched: boolean): this {
+    if (this.latched === latched) return this;
+    this.latched = latched;
+    this.variant = latched ? 'primary' : this.baseVariant;
+    this.label?.setColor(PALETTE[this.variant].text);
+    this.redraw();
+    return this;
+  }
+
+  get isLatched(): boolean {
+    return this.latched;
+  }
+
   /** Подсветка включённого режима. */
   setHighlighted(active: boolean): this {
     const variant = active ? 'active' : this.baseVariant;
@@ -288,10 +304,11 @@ export class Button extends Phaser.GameObjects.Container {
     const width = this.buttonWidth;
     const faceHeight = this.buttonHeight - BUTTON_DEPTH;
     const left = -width / 2;
-    const top = -this.buttonHeight / 2 + (this.pressed ? BUTTON_DEPTH * 0.6 : 0);
+    const down = this.pressed || this.latched;
+    const top = -this.buttonHeight / 2 + (down ? BUTTON_DEPTH * 0.6 : 0);
     const radius = Math.min(30, faceHeight / 2.5, width / 2.5);
     const colors = PALETTE[this.variant];
-    const face = this.hovered && !this.pressed ? lighten(colors.face, 0.12) : colors.face;
+    const face = this.hovered && !down ? lighten(colors.face, 0.12) : colors.face;
 
     g.clear();
     g.fillStyle(colors.side, 1);
