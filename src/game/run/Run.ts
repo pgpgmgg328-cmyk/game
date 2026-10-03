@@ -226,6 +226,8 @@ export class Run {
   private readonly settleAfterMs: number;
   /** Дно банки: о него рассыпается «Метеорчик», если ни в кого не попал. */
   private floorId = -1;
+  /** Боковые стенки банки: касание стенки — ещё не «упала». */
+  private wallIds = new Set<number>();
   private meteor: RunMeteor | null = null;
   /** Чего коснулся «Метеорчик» на этом шаге: клавиши, дна (null) или ничего (undefined). */
   private meteorTouch: RunKey | null | undefined = undefined;
@@ -744,9 +746,15 @@ export class Run {
         bodyA.velocity.x - bodyB.velocity.x,
         bodyA.velocity.y - bodyB.velocity.y,
       );
-      for (const key of [keyA, keyB]) {
+      const sides: [RunKey | undefined, number][] = [
+        [keyA, bodyB.id],
+        [keyB, bodyA.id],
+      ];
+      for (const [key, other] of sides) {
         if (!key || key.removed) continue;
         if (!key.settled) {
+          // Задела стенку — ещё летит: «упала» — это на дно или на другую клавишу.
+          if (this.wallIds.has(other)) continue;
           key.settled = true;
           this.pendingEvents.push({ type: 'land', key, speed });
         } else if (speed >= IMPACT_MIN_SPEED) {
@@ -1016,6 +1024,12 @@ export class Run {
       wallHeight,
       options,
     );
+    // Стенки — гладкое стекло (Matter берёт меньшее трение из пары). Ставим после создания:
+    // неподвижному телу Matter сам выставляет трение 1, не глядя на настройки.
+    for (const wall of [left, right]) {
+      wall.friction = PHYSICS.wallFriction;
+      wall.frictionStatic = 0;
+    }
     const floor = Bodies.rectangle(
       width / 2,
       height + PHYSICS_WALL / 2,
@@ -1024,6 +1038,7 @@ export class Run {
       options,
     );
     this.floorId = floor.id;
+    this.wallIds = new Set([left.id, right.id]);
     Composite.add(this.engine.world, [left, right, floor]);
   }
 

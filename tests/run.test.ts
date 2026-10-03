@@ -14,6 +14,7 @@ import {
 import { runModifiers, type RunModifiers } from '../src/core/meta/upgrades';
 import { readRunSnapshot } from '../src/core/run/snapshot';
 import { BASE_MODIFIERS, Run, type RunEvent, type RunOptions } from '../src/game/run/Run';
+import { THEMES } from '../src/themes';
 import { WORLD1_CLASSIC } from '../src/themes/world1-classic';
 import { matter } from './matter';
 
@@ -176,6 +177,29 @@ describe('забег на настоящей физике', () => {
     expect(run.canDrop).toBe(true);
     expect(ofType(events, 'ready')).toHaveLength(1);
   });
+
+  it.each(THEMES.map((theme) => [theme.id, theme] as const))(
+    '%s: клавиша вплотную к стенке падает на дно, а не повисает над линией опасности',
+    (_id, theme) => {
+      for (const side of ['left', 'right'] as const) {
+        const run = new Run(matter, theme, { seed: 3000 });
+        const events: RunEvent[] = [];
+        run.on((event) => events.push(event));
+        run.setAim(side === 'left' ? -100 : 10_000);
+        run.drop();
+        const key = [...run.keys][0]!;
+        // Касание стенки — ещё не «упала»: линия опасности её не считает.
+        run.stepMany(Math.round(STEPS_PER_SECOND / 2));
+        expect(key.settled).toBe(false);
+        expect(run.dangerMs).toBe(0);
+        // Стекло гладкое: за 3 с клавиша на дне, забег идёт.
+        run.stepMany(3 * STEPS_PER_SECOND);
+        expect(run.over).toBe(false);
+        expect(key.body.bounds.max.y).toBeGreaterThan(JAR.height - 2);
+        expect(ofType(events, 'land')).toHaveLength(1);
+      }
+    },
+  );
 
   it('клавиши не вылетают из банки', () => {
     const { run } = createRun(99);

@@ -23,6 +23,9 @@ export interface MatterBody {
   /** Для простых тел — само тело. */
   readonly parent: MatterBody;
   readonly isStatic: boolean;
+  /** Трение: меняется и после создания (неподвижному телу Matter сам ставит трение 1). */
+  friction: number;
+  frictionStatic: number;
 }
 
 export interface MatterComposite {
