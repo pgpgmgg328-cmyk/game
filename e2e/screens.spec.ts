@@ -9,6 +9,7 @@ import {
   patchSave,
   press,
   screenshot,
+  scrollToButton,
   useFakeSdk,
   VETERAN_SAVE,
   waitRun,
@@ -216,6 +217,92 @@ for (const size of SIZES) {
       await rows(true);
       await expectButtonsFit(page);
       await screenshot(page, `leaderboard-signed-ru-${name}`);
+      expect(problems).toEqual([]);
+    });
+
+    test('миры, задания и украшения помещаются целиком, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(180_000);
+      const problems = watchConsole(page);
+      // Товары магазина приходят из каталога SDK: берём поддельный SDK.
+      await useFakeSdk(page);
+      await openGame(page, { lang: 'ru', seed: '7' });
+      const today = await e2eState<number>(page, 'today');
+      // Второй мир открыт Пробелом классики, на третий монет пока не хватает.
+      await patchSave(page, {
+        ...VETERAN_SAVE,
+        coins: 3200,
+        purchases: { noAds: false, skinsPack: true, granted: [] },
+        decor: { jar: 'candy', background: 'world' },
+        daily: {
+          day: today,
+          task: { world: 'classic', tier: 8 },
+          taskDone: false,
+          gift: false,
+          adGift: false,
+          streak: 3,
+          lastDone: today - 1,
+          bestStreak: 3,
+        },
+      });
+      await press(page, 'menu.world', size.mobile);
+      await waitScene(page, 'Worlds');
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `worlds-ru-${name}`);
+      await press(page, 'common.back', size.mobile);
+      await waitScene(page, 'Menu');
+      await press(page, 'menu.daily', size.mobile);
+      await waitScene(page, 'Daily');
+      await expectNoPageScroll(page);
+      await expectButtonsFit(page);
+      await screenshot(page, `daily-ru-${name}`);
+      await press(page, 'common.back', size.mobile);
+      await waitScene(page, 'Menu');
+      await press(page, 'menu.shop', size.mobile);
+      await waitScene(page, 'Shop');
+      await expect
+        .poll(async () => (await e2eState<{ cards: unknown[] } | null>(page, 'shop'))?.cards.length)
+        .toBe(3);
+      await scrollToButton(page, 'decor.jar.stars');
+      await expectButtonsFit(page);
+      await screenshot(page, `shop-decor-ru-${name}`);
+      expect(problems).toEqual([]);
+    });
+
+    test('забег в мирах 2 и 3 с подсказкой про особую клавишу, скриншоты', async ({ page }) => {
+      test.skip(!size.allScreens, 'только целевые разрешения');
+      test.setTimeout(240_000);
+      const problems = watchConsole(page);
+      await openGame(page, { lang: 'ru', seed: '7' });
+      for (const [world, special] of [
+        ['candy', 'caramel'],
+        ['space', 'meteor'],
+      ] as const) {
+        await patchSave(page, {
+          ...UPGRADED_SAVE,
+          tutorial: { done: true, squish: true, caramel: false, meteor: false },
+          worlds: { selected: world, bought: ['candy', 'space'] },
+        });
+        await page.reload();
+        await waitScene(page, 'Menu');
+        await press(page, 'menu.play', size.mobile);
+        await waitScene(page, 'Game');
+        for (const [tier, x, y, golden] of JAR_SAMPLE) {
+          await e2eCall(page, 'placeKey', tier, x, y, golden);
+        }
+        await e2eCall(page, 'setSpecial', special, 3);
+        await e2eCall(page, 'step', 240);
+        await e2eCall(page, 'freeze', true);
+        await waitRun(page, (state) => state.world === world && state.specialHint === special);
+        await expectNoPageScroll(page);
+        await expectButtonsFit(page);
+        await screenshot(page, `game-${world}-ru-${name}`);
+        // Забег закончен — после перезагрузки меню не спросит «Продолжить забег?».
+        await e2eCall(page, 'freeze', false);
+        await e2eCall(page, 'endRun');
+        await waitScene(page, 'Result', 60_000);
+      }
       expect(problems).toEqual([]);
     });
 
